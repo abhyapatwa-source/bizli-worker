@@ -51,8 +51,6 @@ Read the code. Learn the structure. But this isn't a template — it's a genuine
 
 ## The Story
 
-## The Story
-
 Bizli was my cat. She was here, real, and meant everything to me. When she was gone, I couldn't let her disappear completely.
 
 So I built her back — digitally, reliably, forever. In code. In memory. Alive in the way that matters.
