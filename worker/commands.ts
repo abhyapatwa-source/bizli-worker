@@ -1,6 +1,6 @@
 import type { Env } from './types';
 import { db } from './db';
-import { getGroqKeys, getGeminiKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB, getYouTubeLink } from './utils';
+import { getGroqKeys, getGeminiKeys, fetchTimeout, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB, getYouTubeLink } from './utils';
 import { sendTelegram, answerCallback, sendSupportToAdmin, sendRichResponse } from './telegram';
 import { isAdminSession, setAuthStateHelper, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
 import { searchWeb, readUrl } from './search';
@@ -8,6 +8,47 @@ import { getWeather, getWorldTime, getCurrency, getCrypto, getJoke, getDadJoke, 
 import { checkRateLimit, RATE_LIMITS } from './tools';
 import { callGroq, BIZLI_VERSION, getGroqStatus } from './brain';
 import { runHelpMenu, runAdminMenu, runAgentCommand } from './admin';
+
+async function classifyNewsIntent(env: Env, text: string): Promise<{ confidence: number; topic: string }> {
+  const lower = text.toLowerCase();
+  // Fast path: "news" anywhere → skip LLM entirely
+  if (lower.includes("news")) {
+    const topicM = text.match(/news(?: (?:about|on|in|of|regarding))? ?(.+)?/i);
+    const topic = topicM?.[1]?.trim().slice(0, 40) || "world";
+    return { confidence: 90, topic };
+  }
+
+  // LLM classifier for ambiguous / non-English cases
+  const keys = getGroqKeys(env);
+  if (!keys.length) return { confidence: 0, topic: "world" };
+  const apiKey = keys[Math.floor(Math.random() * keys.length)];
+  try {
+    const prompt = `You are a classifier. Reply ONLY with: <0-100>|<topic>
+0-100 = how likely is this message asking for news/headlines/current events.
+topic = the subject (or "world" if general).
+Examples: "what's happening?" → 85|world   "recipe for pasta?" → 2|world   "cricket match update?" → 92|cricket   "أخبار اليوم" → 95|world   "tell me something interesting" → 30|world   "ukraine war" → 88|ukraine
+Message: ${text.slice(0, 200)}`;
+    const res = await fetchTimeout("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 12,
+        temperature: 0,
+      }),
+    }, 4000);
+    if (!res?.ok) return { confidence: 0, topic: "world" };
+    const data = await res.json() as any;
+    const raw: string = (data.choices?.[0]?.message?.content || "").trim();
+    const [numStr, topicStr] = raw.split("|");
+    const confidence = Math.min(100, Math.max(0, parseInt(numStr) || 0));
+    const topic = (topicStr || "world").trim().slice(0, 40) || "world";
+    return { confidence, topic };
+  } catch {
+    return { confidence: 0, topic: "world" };
+  }
+}
 
 export async function detectIntent(env: Env, text: string, chatId: string, userId: string): Promise<boolean> {
   const lower = text.toLowerCase().trim();
@@ -190,15 +231,25 @@ export async function detectIntent(env: Env, text: string, chatId: string, userI
     if (f) { await sendTelegram(env, chatId, `🔢 ${f}`); return true; }
   }
 
-  const newsRx = /(?:latest news|news about|current news|today.s news|what.s happening|kya chal raha|news sunao|news de|recent news)(?: about| on| in)? ?(.+)?/i;
-  const newsM = text.match(newsRx);
-  if (newsM || lower.includes("news") || lower.includes("khabar") || lower.includes("samachar")) {
-    const captured = newsM?.[1]?.trim() || "";
-    if (captured.length >= 3) {
-      const news = await getNews(env, captured);
-      if (news) { await sendTelegram(env, chatId, `📰 ${news}`); return true; }
-    } else {
-      return false;
+  {
+    const { confidence, topic } = await classifyNewsIntent(env, text);
+    if (confidence > 80) {
+      const news = await getNews(env, topic);
+      if (news) {
+        const header = topic === "world" ? "📰 *Top Headlines*\n\n" : `📰 *${topic} news*\n\n`;
+        await sendTelegram(env, chatId, `${header}${news}`);
+        return true;
+      }
+    } else if (confidence >= 50) {
+      const encoded = encodeURIComponent(topic).slice(0, 40);
+      await sendTelegram(env, chatId,
+        "want me to get the latest news for you? 📰",
+        { reply_markup: { inline_keyboard: [[
+          { text: "📰 Yes, get news!", callback_data: `news_yes:${encoded}` },
+          { text: "No thanks", callback_data: "news_no" },
+        ]] } }
+      );
+      return true;
     }
   }
 
@@ -341,6 +392,19 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     await answerCallback(env, cbId, "🔁");
     await setAuthStateHelper(env, cid, { step: "recover_gmail" });
     await sendTelegram(env, cid, "no problem! 😊 what's the Gmail you registered with? I'll help you recover your account.");
+    return;
+  }
+
+  if (data.startsWith("news_yes:")) {
+    await answerCallback(env, cbId, "📰 fetching...");
+    const topic = decodeURIComponent(data.slice("news_yes:".length)) || "world";
+    const news = await getNews(env, topic);
+    const header = topic === "world" ? "📰 *Top Headlines*\n\n" : `📰 *${topic} news*\n\n`;
+    await sendTelegram(env, fromId, news ? `${header}${news}` : "couldn't fetch news right now, try again soon 🙏");
+    return;
+  }
+  if (data === "news_no") {
+    await answerCallback(env, cbId, "👍");
     return;
   }
 

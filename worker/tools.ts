@@ -179,7 +179,7 @@ export const BIZLI_TOOLS = [
     type: "function",
     function: {
       name: "send_gif",
-      description: "Send a reaction GIF. Use ALWAYS when the user sent a GIF (GIF-for-GIF — this is non-negotiable). For non-GIF messages, use sparingly — only for genuinely funny, celebratory, comforting, or very playful moments. Always say something in text too — the GIF adds to the reply, not replaces it. If you receive 'gif_unavailable', no GIF was found — react warmly with text and emoji only, no apology needed.",
+      description: "Send a reaction GIF. Use ONLY in these cases: (1) user sent a GIF — match their energy with one back; (2) something is genuinely cry-laughing funny, not just mildly amusing; (3) a moment is so exciting or touching that a GIF says it better than words ever could. Do NOT use for: greetings, \"okay/sure/cool\" replies, casual positivity, mild fun, comforting someone, or any moment where text alone is fine. The GIF IS the reaction — don't add text explaining it unless you have something separate to say. When in doubt, skip the GIF. If you receive 'gif_unavailable', reply with text only, no apology.",
       parameters: {
         type: "object",
         properties: { query: { type: "string", description: "Short search term for the GIF, e.g. 'laughing', 'celebration', 'hug', 'mind blown', 'cute cat', 'bye wave'" } },

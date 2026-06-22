@@ -317,7 +317,9 @@ export async function getNews(env: Env, query: string): Promise<string> {
         const data = await res.json() as any;
         const results = data?.response?.results;
         if (results?.length) {
-          return results.slice(0, 3).map((a: any) => `• ${a.webTitle} — The Guardian\n  ${a.webUrl}`).join("\n\n");
+          const searchUrl = `https://www.theguardian.com/search?q=${q}`;
+          const lines = results.slice(0, 3).map((a: any) => `**${a.webTitle}** — [The Guardian](${a.webUrl})`).join("\n");
+          return `${lines}\n\nWant more? [See all news](${searchUrl})`;
         }
       }
     } catch {}
@@ -328,7 +330,9 @@ export async function getNews(env: Env, query: string): Promise<string> {
     if (!res.ok) return "";
     const data = await res.json() as any;
     if (!data.articles?.length) return "";
-    return data.articles.slice(0, 3).map((a: any) => `• ${a.title} — ${a.source?.name}\n  ${a.url}`).join("\n\n");
+    const searchUrl = `https://news.google.com/search?q=${q}&hl=en`;
+    const lines = data.articles.slice(0, 3).map((a: any) => `**${a.title}** — [${a.source?.name}](${a.url})`).join("\n");
+    return `${lines}\n\nWant more? [See all news](${searchUrl})`;
   } catch { return ""; }
 }
 
