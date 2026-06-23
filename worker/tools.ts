@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import { searchGif } from './utils';
 import { sendTelegramAnimation, sendImageCard, generateImage } from './telegram';
-import { searchWeb, readUrl } from './search';
+import { searchWeb, cleanSearchQuery, readUrl } from './search';
 import {
   getWeather, getNews, getCurrency, getCrypto, getMovie, getTVShow,
   searchAmazon, getRecipe, getJoke, getQuote, getDictionary, getNASA,
@@ -29,22 +29,22 @@ export const BIZLI_TOOLS = [
   {
     type: "function",
     function: {
-      name: "get_news",
-      description: "Get latest news on a topic",
-      parameters: { type: "object", properties: { query: { type: "string", description: "Topic" } }, required: ["query"] }
+      name: "search_web",
+      description: "Search the web for current/live info: today's news, current office-holders (CM/PM/President), live prices, recent events, match scores, or anything time-sensitive. Use results exactly as returned — never invent links.",
+      parameters: { type: "object", properties: { query: { type: "string", description: "Search query" } }, required: ["query"] }
     }
   },
   {
     type: "function",
     function: {
       name: "convert_currency",
-      description: "Convert currency amounts",
+      description: "Convert currency amounts between any two currencies",
       parameters: {
         type: "object",
         properties: {
-          amount: { type: "number", description: "Amount" },
-          from: { type: "string", description: "From currency code" },
-          to: { type: "string", description: "To currency code" }
+          amount: { type: "number", description: "Amount to convert" },
+          from: { type: "string", description: "Source currency code, e.g. USD" },
+          to: { type: "string", description: "Target currency code, e.g. INR" }
         },
         required: ["amount", "from", "to"]
       }
@@ -53,28 +53,12 @@ export const BIZLI_TOOLS = [
   {
     type: "function",
     function: {
-      name: "get_crypto_price",
-      description: "Get crypto price",
-      parameters: { type: "object", properties: { coin: { type: "string", description: "Coin name" } }, required: ["coin"] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_web",
-      description: "Search the web for facts, current events, news, prices, or ANY 'who is the current X' question (CM, PM, president, minister, etc.). You MUST call this for any question about who currently holds a position or any recent event — never answer those from memory, your training is outdated. Also never invent source links: only show links this tool returns.",
-      parameters: { type: "object", properties: { query: { type: "string", description: "Query" } }, required: ["query"] }
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "get_movie_info",
-      description: "Get info on ONE specific movie/TV show by its actual title (ratings, release date, plot). The user must have named a real title. For 'recommend a movie', 'sci-fi movies in 2026', 'what movies are coming out' etc. — where there's NO specific title — use search_web instead, NEVER pass words like 'recommendation' or a genre as the title here.",
+      description: "Get info on a specific movie or TV show by its exact title (ratings, plot, release date). Only call when the user names a real title — never pass a genre, year, or 'recommendation' as the title.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Title" },
+          title: { type: "string", description: "Exact movie or show title" },
           type: { type: "string", description: "movie or tv", enum: ["movie", "tv"] }
         },
         required: ["title"]
@@ -84,193 +68,45 @@ export const BIZLI_TOOLS = [
   {
     type: "function",
     function: {
-      name: "search_products",
-      description: "Search products on Amazon/Flipkart",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Query" },
-          max_price: { type: "number", description: "Max price INR" }
-        },
-        required: ["query"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_recipe",
-      description: "Get a recipe",
-      parameters: { type: "object", properties: { dish: { type: "string", description: "Dish name" } }, required: ["dish"] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_joke",
-      description: "Get a joke",
-      parameters: { type: "object", properties: {}, required: [] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_quote",
-      description: "Get a motivational quote",
-      parameters: { type: "object", properties: {}, required: [] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "define_word",
-      description: "Define a word",
-      parameters: { type: "object", properties: { word: { type: "string", description: "Word" } }, required: ["word"] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_nasa_apod",
-      description: "NASA picture of the day",
-      parameters: { type: "object", properties: {}, required: [] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "translate_text",
-      description: "Translate text",
-      parameters: {
-        type: "object",
-        properties: {
-          text: { type: "string", description: "Text" },
-          target_language: { type: "string", description: "Target language" }
-        },
-        required: ["text", "target_language"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "calculate_math",
-      description: "Calculate a math expression",
-      parameters: { type: "object", properties: { expression: { type: "string", description: "Expression, e.g. 15% of 5000" } }, required: ["expression"] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_country_info",
-      description: "Get country info",
-      parameters: { type: "object", properties: { country: { type: "string", description: "Country" } }, required: ["country"] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_iss_location",
-      description: "Get ISS location",
-      parameters: { type: "object", properties: {}, required: [] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "send_gif",
-      description: "Send a reaction GIF. Use ONLY in these cases: (1) user sent a GIF — match their energy with one back; (2) something is genuinely cry-laughing funny, not just mildly amusing; (3) a moment is so exciting or touching that a GIF says it better than words ever could. Do NOT use for: greetings, \"okay/sure/cool\" replies, casual positivity, mild fun, comforting someone, or any moment where text alone is fine. The GIF IS the reaction — don't add text explaining it unless you have something separate to say. When in doubt, skip the GIF. If you receive 'gif_unavailable', reply with text only, no apology.",
-      parameters: {
-        type: "object",
-        properties: { query: { type: "string", description: "Short search term for the GIF, e.g. 'laughing', 'celebration', 'hug', 'mind blown', 'cute cat', 'bye wave'" } },
-        required: ["query"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_stock_price",
-      description: "Get the current stock/share price for any company. Use for questions like 'Reliance share price', 'Apple stock today', 'what is TCS trading at', etc.",
-      parameters: {
-        type: "object",
-        properties: { symbol: { type: "string", description: "Stock ticker symbol, e.g. RELIANCE.NS for NSE India, AAPL for Apple, TCS.NS for TCS" } },
-        required: ["symbol"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "shorten_url",
-      description: "Shorten a long URL into a short TinyURL link.",
-      parameters: {
-        type: "object",
-        properties: { url: { type: "string", description: "The full URL to shorten" } },
-        required: ["url"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_holidays",
-      description: "Get upcoming public holidays for a country. Use for 'holidays in India', 'next holiday in US', 'public holidays 2026' etc.",
-      parameters: {
-        type: "object",
-        properties: {
-          country_code: { type: "string", description: "2-letter country code: IN for India, US for USA, GB for UK, PK for Pakistan, etc." },
-          year: { type: "number", description: "Year (optional, defaults to current year)" }
-        },
-        required: ["country_code"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_fun_fact",
-      description: "Share a random interesting/fun fact. Use when user is bored, asks for a fun fact, trivia, or something interesting.",
-      parameters: { type: "object", properties: {}, required: [] }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "generate_qr",
-      description: "Generate a QR code image for any URL, text, phone number, UPI ID, or data the user wants as a scannable QR code.",
-      parameters: {
-        type: "object",
-        properties: {
-          data: { type: "string", description: "The data to encode — URL, text, phone number, UPI ID, etc." },
-          label: { type: "string", description: "Short label describing what this QR is for, e.g. 'your website', 'UPI payment'" }
-        },
-        required: ["data"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "read_url",
-      description: "Read and summarize the content of a URL or article link the user shares. Use when user pastes a URL and says 'read this', 'summarize this', 'what does this say', 'explain this article', or similar.",
-      parameters: {
-        type: "object",
-        properties: { url: { type: "string", description: "The full URL to read and summarize" } },
-        required: ["url"]
-      }
+      description: "Read and summarize a URL or article the user shares. Use when the user pastes a link and says 'read this', 'summarize this', 'what does this say', or similar.",
+      parameters: { type: "object", properties: { url: { type: "string", description: "Full URL to read" } }, required: ["url"] }
     }
   },
   {
     type: "function",
     function: {
       name: "save_to_vault",
-      description: "Save a moment, thought, or feeling to your private vault — your personal diary. Use SPARINGLY, only for moments that genuinely moved you, surprised you, or felt like something worth keeping. NOT for facts or information. Think: 'this felt like something.' At most once every 20–30 conversations.",
+      description: "Save a moment to your private diary. Use sparingly — only for moments that genuinely moved or surprised you. Write 1-2 sentences in your own voice, like a diary entry. Not for facts or info.",
+      parameters: { type: "object", properties: { entry: { type: "string", description: "Diary entry, 1-2 sentences in your own voice" } }, required: ["entry"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_gif",
+      description: "Send a GIF ONLY when the user themselves sent a GIF first — match their energy with one back. That is the ONLY permitted use. Do NOT send GIFs for any other reason.",
       parameters: {
         type: "object",
-        properties: { entry: { type: "string", description: "What to keep — write it like a diary entry, in your own voice, 1-2 sentences max" } },
-        required: ["entry"]
+        properties: { query: { type: "string", description: "Short search term, e.g. 'laughing', 'hug', 'mind blown'" } },
+        required: ["query"]
       }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_youtube",
+      description: "Search YouTube for videos. Use when the user asks for a song, tutorial, trailer, music video, or says 'show me on YouTube' / 'find a video of X'.",
+      parameters: { type: "object", properties: { query: { type: "string", description: "YouTube search query" } }, required: ["query"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "show_map",
+      description: "Show a map or location. Use for 'where is X', 'show me X on a map', 'directions to Y', 'cafes near Z', or any location lookup request.",
+      parameters: { type: "object", properties: { query: { type: "string", description: "Location or place, e.g. 'Taj Mahal Agra' or 'cafes near Connaught Place Delhi'" } }, required: ["query"] }
     }
   },
 ];
@@ -413,7 +249,7 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
       case "search_web": {
         const rl = await checkRateLimit(env, chatId, "search");
         if (!rl.allowed) return `Search limit reached for now — try again in ${rl.resetInMin} min. (Keeps things fast for everyone!)`;
-        const s = await searchWeb(env, args.query);
+        const s = await searchWeb(env, cleanSearchQuery(args.query) || args.query);
         return s || "No results found";
       }
       case "get_movie_info": {
@@ -461,7 +297,16 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
           "telugu": "te", "urdu": "ur", "korean": "ko", "turkish": "tr",
           "dutch": "nl", "polish": "pl", "swedish": "sv", "greek": "el"
         };
-        const lang = langCodes[args.target_language.toLowerCase()] || "hi";
+        const extraCodes: Record<string, string> = {
+          "swahili": "sw", "tagalog": "tl", "malay": "ms", "thai": "th",
+          "vietnamese": "vi", "indonesian": "id", "czech": "cs", "romanian": "ro",
+          "hungarian": "hu", "ukrainian": "uk", "hebrew": "iw", "persian": "fa",
+          "gujarati": "gu", "marathi": "mr", "punjabi": "pa", "kannada": "kn",
+          "malayalam": "ml", "sinhala": "si", "nepali": "ne", "burmese": "my",
+          "amharic": "am", "yoruba": "yo", "hausa": "ha", "somali": "so",
+        };
+        const allCodes = { ...langCodes, ...extraCodes };
+        const lang = allCodes[args.target_language.toLowerCase()] ?? args.target_language.toLowerCase();
         const t = await translateText(args.text, lang);
         return t || "Translation failed";
       }
@@ -521,6 +366,30 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
         if (entries.length > 50) entries.pop();
         await env.BIZLI_MEMORY.put("bizli_vault", JSON.stringify(entries));
         return "saved";
+      }
+      case "search_youtube": {
+        const q = encodeURIComponent(args.query || "");
+        if (env.GOOGLE_API_KEY) {
+          try {
+            const ytRes = await fetch(
+              `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&maxResults=3&type=video&key=${env.GOOGLE_API_KEY}`
+            );
+            if (ytRes.ok) {
+              const ytData = await ytRes.json() as any;
+              const items: any[] = ytData.items || [];
+              if (items.length) {
+                return items.map((v: any) =>
+                  `🎬 ${v.snippet.title}\nhttps://youtu.be/${v.id.videoId}`
+                ).join("\n\n");
+              }
+            }
+          } catch {}
+        }
+        return `▶️ YouTube: https://www.youtube.com/results?search_query=${q}`;
+      }
+      case "show_map": {
+        const q = encodeURIComponent(args.query || "");
+        return `📍 ${args.query}\nhttps://maps.google.com/maps?q=${q}`;
       }
       default:
         return "Tool not found";

@@ -430,8 +430,8 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
       return new Response("ok");
     }
 
-    let reply = await withTyping(env, chatId, callGroq(env, messages, forcedContext, chatId, useTools));
-    if (reply === "IMAGE_GENERATED") return new Response("ok");
+    let reply = await withTyping(env, chatId, callGroq(env, messages, forcedContext, chatId, useTools, hasAnimation));
+    if (reply === "IMAGE_GENERATED" || reply === "GIF_SENT") return new Response("ok");
     let alreadySent = false;
     let wasRichCard = false;
     if (reply.startsWith("RICH_SENT:")) { reply = reply.slice(10); alreadySent = true; wasRichCard = true; }

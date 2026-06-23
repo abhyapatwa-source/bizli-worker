@@ -24,9 +24,28 @@ async function classifyNewsIntent(env: Env, text: string): Promise<{ confidence:
   const apiKey = keys[Math.floor(Math.random() * keys.length)];
   try {
     const prompt = `You are a classifier. Reply ONLY with: <0-100>|<topic>
-0-100 = how likely is this message asking for news/headlines/current events.
+0-100 = how likely this message is asking for news HEADLINES or current events from a news source.
 topic = the subject (or "world" if general).
-Examples: "what's happening?" → 85|world   "recipe for pasta?" → 2|world   "cricket match update?" → 92|cricket   "أخبار اليوم" → 95|world   "tell me something interesting" → 30|world   "ukraine war" → 88|ukraine
+
+CRITICAL DISTINCTION:
+- "who is X" / "X kaun hai" / "current PM/CM/President/minister/CEO" = NOT news — score 0-10. These want a factual answer, not headlines.
+- "latest news on X" / "news about Y" / "headlines today" = IS news — score 80-95.
+- Sports match scores/results = IS news — score 70-90.
+
+Examples:
+"what's happening?" → 80|world
+"recipe for pasta?" → 2|world
+"cricket match update?" → 85|cricket
+"أخبار اليوم" → 95|world
+"tell me something interesting" → 25|world
+"ukraine war" → 80|ukraine
+"who is the PM of India?" → 5|world
+"abhi India ka PM kaun hai?" → 5|india
+"CM kaun hai West Bengal ka?" → 5|west_bengal
+"current President of USA?" → 5|usa
+"latest news about Modi?" → 88|modi
+"IPL match score today?" → 82|ipl
+"Bollywood gossip latest?" → 65|bollywood
 Message: ${text.slice(0, 200)}`;
     const res = await fetchTimeout("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",

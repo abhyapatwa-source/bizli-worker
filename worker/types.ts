@@ -36,4 +36,5 @@ export interface Env {
   DISCORD_BOT_TOKEN?: string;
   GIPHY_API_KEY?: string;
   HF_API_KEY?: string;
+  GOOGLE_API_KEY?: string;
 }
