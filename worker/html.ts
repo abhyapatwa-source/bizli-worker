@@ -8,6 +8,7 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BIZLI LAB — Command Center</title>
+<script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -68,7 +69,7 @@ body::before{
 #pw-btn:hover{opacity:.82}
 #pw-err{color:var(--red);font-size:.72rem;margin-top:7px;min-height:16px}
 /* LAYOUT */
-#app{position:relative;z-index:1;padding:12px 14px;display:none}
+#app{position:relative;z-index:1;padding:12px 14px;display:none;margin-left:240px;margin-right:360px;transition:margin-left 0.3s ease,margin-right 0.3s ease}
 .summary-row{
   display:flex;gap:10px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;
   background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.1);border-radius:10px;
@@ -254,10 +255,140 @@ body::before{
   #orb{width:78px;height:78px;margin:-39px 0 0 -39px}
   .r1{width:112px;height:112px}.r2{width:138px;height:138px}.r3{width:164px;height:164px}
 }
+/* LAB AGENT PANEL */
+#lab{
+  position:fixed;right:0;top:0;bottom:0;width:360px;
+  background:rgba(8,12,22,.96);backdrop-filter:blur(14px);
+  border-left:1px solid rgba(0,212,255,.12);
+  z-index:200;display:none;flex-direction:column;
+  transition:transform 0.3s ease;
+}
+#lab-hdr{
+  padding:14px 16px 12px;border-bottom:1px solid rgba(0,212,255,.1);
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+}
+.lab-title{font-size:.62rem;letter-spacing:.28em;color:var(--blue);font-weight:700}
+.lab-dot{width:7px;height:7px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 7px var(--green);animation:lpulse 1.6s ease-in-out infinite;
+  flex-shrink:0;margin-left:auto}
+#lab-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.lbmsg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:.68rem;line-height:1.55;word-break:break-word;white-space:pre-wrap}
+.lbu{align-self:flex-end;background:rgba(0,212,255,.18);border:1px solid rgba(0,212,255,.3);color:var(--text);border-radius:12px 12px 3px 12px}
+.lba{align-self:flex-start;background:#0d1422;border:1px solid rgba(0,212,255,.08);color:#c8ddf0;font-family:"Courier New",monospace;border-radius:12px 12px 12px 3px}
+.lbsys{align-self:center;color:var(--muted);font-size:.58rem;font-style:italic;max-width:100%;text-align:center;padding:4px 0}
+#lab-proc{
+  padding:8px 16px;font-size:.58rem;color:var(--cyan);letter-spacing:.1em;
+  display:none;flex-shrink:0;animation:procblink 1.2s ease-in-out infinite;
+}
+@keyframes procblink{0%,100%{opacity:.4}50%{opacity:1}}
+#lab-input{
+  padding:10px 12px;border-top:1px solid rgba(0,212,255,.1);
+  display:flex;gap:8px;flex-shrink:0;align-items:flex-end;
+}
+#lab-ta{
+  flex:1;background:#0a1020;border:1px solid rgba(0,212,255,.2);color:var(--text);
+  border-radius:8px;padding:8px 10px;font-family:"Courier New",monospace;font-size:.68rem;
+  resize:none;outline:none;line-height:1.5;min-height:36px;max-height:120px;
+  transition:border-color .18s;
+}
+#lab-ta:focus{border-color:rgba(0,212,255,.5)}
+#lab-ta::placeholder{color:var(--muted)}
+#lab-send{
+  width:36px;height:36px;flex-shrink:0;
+  background:var(--blue);border:none;border-radius:8px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:#060912;font-size:.85rem;font-weight:700;
+  transition:opacity .15s,transform .1s;
+}
+#lab-send:hover{opacity:.82;transform:translateY(-1px)}
+#lab-send:active{transform:translateY(0)}
+@media(min-width:801px){#lab.collapsed{transform:translateX(360px)}}
+#lab-btn{
+  position:fixed;right:344px;top:50%;
+  transform:translateY(-50%);
+  width:32px;height:32px;border-radius:50%;
+  background:rgba(8,12,22,.96);border:1px solid rgba(0,212,255,.2);
+  cursor:pointer;display:none;align-items:center;justify-content:center;
+  color:rgba(0,212,255,.75);font-size:1.2rem;line-height:1;
+  z-index:201;transition:right 0.3s ease,box-shadow 0.15s;
+  user-select:none;
+}
+#lab-btn:hover{box-shadow:0 0 10px rgba(0,212,255,.35)}
+#lab-toggle{
+  display:none;position:fixed;bottom:20px;right:20px;
+  width:46px;height:46px;border-radius:50%;
+  background:var(--blue);border:none;cursor:pointer;
+  z-index:300;box-shadow:var(--glow-b);
+  align-items:center;justify-content:center;
+  font-size:.65rem;font-weight:700;letter-spacing:.06em;color:#060912;
+}
+/* LEFT NAV */
+#leftnav{
+  position:fixed;left:0;top:0;bottom:0;width:240px;
+  background:rgba(8,12,22,.96);backdrop-filter:blur(14px);
+  border-right:1px solid rgba(0,212,255,.12);
+  z-index:200;display:none;flex-direction:column;
+  transition:transform 0.3s ease,width 0.3s ease;overflow:hidden;
+}
+#lnav-brand{padding:16px 16px 12px;border-bottom:1px solid rgba(0,212,255,.08);flex-shrink:0}
+.lnav-logo{font-size:.72rem;font-weight:700;letter-spacing:.2em;color:var(--blue);text-shadow:var(--glow-b);white-space:nowrap;display:block}
+.lnav-ver{display:block;font-size:.52rem;color:var(--muted);letter-spacing:.08em;margin-top:4px;white-space:nowrap}
+#lnav-tabs{flex:1;overflow-y:auto;padding:8px 0;overflow-x:hidden}
+.lnav-item{
+  display:flex;align-items:center;gap:12px;height:40px;padding:0 16px;
+  cursor:pointer;color:#9ca3af;font-size:.7rem;letter-spacing:.06em;
+  transition:background .15s,color .15s;border-left:3px solid transparent;
+  white-space:nowrap;overflow:hidden;
+}
+.lnav-item:hover:not(.disabled){background:rgba(255,255,255,.04);color:#fff}
+.lnav-item.active{background:rgba(0,212,255,.1);border-left-color:var(--blue);color:var(--blue)}
+.lnav-item.disabled{opacity:.35;cursor:not-allowed}
+.lnav-item svg{flex-shrink:0;width:16px;height:16px;stroke-width:1.5}
+.lnav-sep{height:1px;background:rgba(0,212,255,.08);margin:6px 16px}
+#lnav-foot{padding:12px 16px;border-top:1px solid rgba(0,212,255,.08);flex-shrink:0;display:flex;align-items:center;gap:6px}
+#lnav-foot .live-dot{width:6px;height:6px}
+#lnav-foot .live-txt{font-size:.6rem}
+#lnav-ham{
+  display:none;position:fixed;top:10px;left:10px;z-index:201;
+  background:rgba(8,12,22,.96);border:1px solid rgba(0,212,255,.2);
+  border-radius:6px;width:32px;height:32px;cursor:pointer;
+  align-items:center;justify-content:center;color:rgba(0,212,255,.75);font-size:1.1rem;
+}
+/* TAB CONTENT */
+#app:not(.tab-overview) .summary-row{display:none}
+#app:not(.tab-overview) .grid{grid-template-columns:1fr!important}
+#app:not(.tab-overview) .panel{grid-column:1!important;grid-row:auto!important}
+#app.tab-keys #orb-section,#app.tab-keys #drive-section,#app.tab-keys #err-section,#app.tab-keys #users-section,#app.tab-keys #tools-section,#app.tab-keys #vitals-section{display:none}
+#app.tab-errors #orb-section,#app.tab-errors #brain-section,#app.tab-errors #drive-section,#app.tab-errors #users-section,#app.tab-errors #tools-section,#app.tab-errors #vitals-section{display:none}
+#app.tab-tools #orb-section,#app.tab-tools #brain-section,#app.tab-tools #drive-section,#app.tab-tools #err-section,#app.tab-tools #users-section,#app.tab-tools #vitals-section{display:none}
+#app.tab-users #orb-section,#app.tab-users #brain-section,#app.tab-users #drive-section,#app.tab-users #err-section,#app.tab-users #tools-section,#app.tab-users #vitals-section{display:none}
+#app.tab-vitals #orb-section,#app.tab-vitals #brain-section,#app.tab-vitals #drive-section,#app.tab-vitals #err-section,#app.tab-vitals #users-section,#app.tab-vitals #tools-section{display:none}
+@media(max-width:800px){
+  #app{margin-left:0!important;margin-right:0!important}
+  #lab{
+    top:auto;right:0;left:0;width:100%;height:70vh;bottom:0;
+    border-left:none;border-top:1px solid rgba(0,212,255,.18);
+    transform:translateY(100%);transition:transform .3s ease;
+  }
+  #lab.open{transform:translateY(0)}
+  #lab-toggle{display:flex}
+  #lab-btn{display:none!important}
+  #leftnav{transform:translateX(-240px)}
+  #leftnav.open{transform:translateX(0)}
+  #lnav-ham{display:flex}
+}
+@media(min-width:801px)and(max-width:1100px){
+  #leftnav{width:60px}
+  .lnav-item span,.lnav-ver,.lnav-sep{display:none}
+  .lnav-item{justify-content:center;padding:0;border-left:none}
+  .lnav-item.active{background:rgba(0,212,255,.1)}
+  #app{margin-left:60px!important}
+}
 </style>
 </head>
 <body>
 <div id="stars"></div>
+<button id="lnav-ham" onclick="lnavToggle()">&#9776;</button>
 <!-- GATE -->
 <div id="gate">
   <div class="gate-box">
@@ -271,6 +402,30 @@ body::before{
     <div id="pw-err"></div>
   </div>
 </div>
+<!-- LEFT NAV -->
+<nav id="leftnav">
+  <div id="lnav-brand">
+    <span class="lnav-logo">⬡ BIZLI LAB</span>
+    <span class="lnav-ver" id="lnav-ver"></span>
+  </div>
+  <div id="lnav-tabs">
+    <div class="lnav-item active" data-tab="overview" onclick="switchTab('overview')"><i data-lucide="eye"></i><span>Overview</span></div>
+    <div class="lnav-item" data-tab="keys" onclick="switchTab('keys')"><i data-lucide="key"></i><span>Keys</span></div>
+    <div class="lnav-item" data-tab="errors" onclick="switchTab('errors')"><i data-lucide="alert-triangle"></i><span>Errors</span></div>
+    <div class="lnav-item" data-tab="tools" onclick="switchTab('tools')"><i data-lucide="wrench"></i><span>Tools</span></div>
+    <div class="lnav-item" data-tab="users" onclick="switchTab('users')"><i data-lucide="users"></i><span>Users</span></div>
+    <div class="lnav-item" data-tab="vitals" onclick="switchTab('vitals')"><i data-lucide="activity"></i><span>Vitals</span></div>
+    <div class="lnav-sep"></div>
+    <div class="lnav-item disabled" title="Phase 2"><i data-lucide="brain"></i><span>Brains</span></div>
+    <div class="lnav-item disabled" title="Phase 2"><i data-lucide="cpu"></i><span>Models</span></div>
+    <div class="lnav-item disabled" title="Phase 2"><i data-lucide="zap"></i><span>Live Feed</span></div>
+    <div class="lnav-item disabled" title="Phase 2"><i data-lucide="settings"></i><span>Maintenance</span></div>
+  </div>
+  <div id="lnav-foot">
+    <span class="live-dot"></span>
+    <span class="live-txt">LIVE</span>
+  </div>
+</nav>
 <!-- DASHBOARD -->
 <div id="app">
   <div id="topbar">
@@ -367,6 +522,23 @@ body::before{
     </div>
   </div>
 </div>
+<!-- LAB AGENT PANEL -->
+<div id="lab">
+  <div id="lab-hdr">
+    <span class="lab-title">LAB AGENT</span>
+    <span class="lab-dot"></span>
+  </div>
+  <div id="lab-body">
+    <div class="lbsys">Lab Agent online. Read-only diagnostics.</div>
+  </div>
+  <div id="lab-proc">Processing...</div>
+  <div id="lab-input">
+    <textarea id="lab-ta" rows="1" placeholder="Ask about system health..."></textarea>
+    <button id="lab-send">&#9658;</button>
+  </div>
+</div>
+<button id="lab-btn" onclick="labToggleDesktop()">&#8250;</button>
+<button id="lab-toggle" onclick="labToggle()">LAB</button>
 <script>
 try{(function(){
   var s=document.getElementById("stars");
@@ -381,7 +553,7 @@ try{(function(){
   }
 })();}catch(e){}
 
-var PW="",prevN={},knownDrive=[],started=false;
+var PW="",prevN={},knownDrive=[],started=false,lastD=null;
 
 function submitPw(){
   var v=document.getElementById("pw-input").value.trim();
@@ -520,6 +692,7 @@ function updateTools(d){
 function updateVitals(d){
   var el=function(id){return document.getElementById(id);};
   if(el("v-ver"))el("v-ver").textContent=d.version||"—";
+  if(el("lnav-ver"))el("lnav-ver").textContent=d.version||"";
   if(el("v-mems"))el("v-mems").textContent=d.memory?d.memory.count:"—";
   if(el("v-errc"))el("v-errc").textContent=d.recentErrors?d.recentErrors.length:0;
   if(el("v-wait"))el("v-wait").textContent=d.users?d.users.waitlist:"—";
@@ -534,6 +707,7 @@ function tickClock(){
 }
 
 function updateAll(d){
+  lastD=d;
   updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
   updateUsers(d);updateTools(d);updateVitals(d);
   setN("s-users",d.users?d.users.total:0);
@@ -562,6 +736,11 @@ function fetchStats(first){
       if(first){
         document.getElementById("gate").style.display="none";
         document.getElementById("app").style.display="block";
+        document.getElementById("lab").style.display="flex";
+        document.getElementById("leftnav").style.display="flex";
+        var lbtn=document.getElementById("lab-btn");if(lbtn)lbtn.style.display="flex";
+        try{if(localStorage.getItem("bizli_lab_collapsed")==="1")setLabState(true,false);}catch(e){}
+        try{switchTab(localStorage.getItem("bizli_nav_tab")||"overview");}catch(e){switchTab("overview");}
       }
       updateAll(d);
     })
@@ -575,6 +754,118 @@ function fetchStats(first){
 setInterval(function(){fetchStats(false);},3000);
 setInterval(tickClock,1000);
 tickClock();
+
+// LAB AGENT
+var labHistory=[],labBusy=false,LAB_MAX=30;
+(function(){
+  try{
+    var s=localStorage.getItem("bizli_lab_chat");
+    if(s){
+      var ms=JSON.parse(s);
+      if(Array.isArray(ms)&&ms.length){
+        labHistory=ms;
+        var b=document.getElementById("lab-body");
+        b.innerHTML="";
+        ms.forEach(function(m){appendLabBubble(m.role==="user"?"u":"a",m.content,false);});
+      }
+    }
+  }catch(e){}
+})();
+function appendLabBubble(type,text,scroll){
+  var b=document.getElementById("lab-body");
+  var d=document.createElement("div");
+  d.className="lbmsg "+(type==="u"?"lbu":"lba");
+  d.textContent=text;
+  b.appendChild(d);
+  if(scroll!==false)b.scrollTop=b.scrollHeight;
+  return d;
+}
+function typewriterLab(el,text,onDone){
+  var i=0;el.textContent="";
+  var iv=setInterval(function(){
+    el.textContent+=text[i];i++;
+    document.getElementById("lab-body").scrollTop=document.getElementById("lab-body").scrollHeight;
+    if(i>=text.length){clearInterval(iv);if(onDone)onDone();}
+  },18);
+}
+function saveLabHistory(){
+  try{localStorage.setItem("bizli_lab_chat",JSON.stringify(labHistory.slice(-LAB_MAX)));}catch(e){}
+}
+function labSend(){
+  if(labBusy||!PW)return;
+  var ta=document.getElementById("lab-ta");
+  var msg=ta.value.trim();
+  if(!msg)return;
+  ta.value="";ta.style.height="auto";
+  appendLabBubble("u",msg,true);
+  labHistory.push({role:"user",content:msg});
+  if(labHistory.length>LAB_MAX)labHistory=labHistory.slice(-LAB_MAX);
+  saveLabHistory();
+  labBusy=true;
+  document.getElementById("lab-proc").style.display="block";
+  fetch("/lab/agent",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({key:PW,messages:labHistory.map(function(m){return{role:m.role,content:m.content};}),dashboardData:lastD||{}})
+  })
+  .then(function(r){return r.json();})
+  .then(function(data){
+    document.getElementById("lab-proc").style.display="none";
+    var reply=data.reply||"No response.";
+    var el=appendLabBubble("a","",true);
+    typewriterLab(el,reply,function(){
+      labHistory.push({role:"assistant",content:reply});
+      if(labHistory.length>LAB_MAX)labHistory=labHistory.slice(-LAB_MAX);
+      saveLabHistory();
+      labBusy=false;
+    });
+  })
+  .catch(function(e){
+    document.getElementById("lab-proc").style.display="none";
+    appendLabBubble("a","Error: "+(e.message||"Connection failed"),true);
+    labBusy=false;
+  });
+}
+function switchTab(tab){
+  var app=document.getElementById("app");
+  app.className=app.className.replace(/\btab-\S+/g,"").trim();
+  app.classList.add("tab-"+tab);
+  var items=document.querySelectorAll(".lnav-item[data-tab]");
+  for(var i=0;i<items.length;i++){
+    items[i].classList.toggle("active",items[i].getAttribute("data-tab")===tab);
+  }
+  try{localStorage.setItem("bizli_nav_tab",tab);}catch(e){}
+}
+function lnavToggle(){document.getElementById("leftnav").classList.toggle("open");}
+function setLabState(collapsed,animate){
+  var lab=document.getElementById("lab");
+  var btn=document.getElementById("lab-btn");
+  var app=document.getElementById("app");
+  if(!animate){lab.style.transition="none";if(btn)btn.style.transition="none";app.style.transition="none";}
+  if(collapsed){
+    lab.classList.add("collapsed");
+    if(btn){btn.style.right="0";btn.textContent="‹";}
+    app.style.marginRight="0";
+  }else{
+    lab.classList.remove("collapsed");
+    if(btn){btn.style.right="344px";btn.textContent="›";}
+    app.style.marginRight="360px";
+  }
+  if(!animate){lab.offsetHeight;lab.style.transition="";if(btn)btn.style.transition="";app.style.transition="";}
+  try{localStorage.setItem("bizli_lab_collapsed",collapsed?"1":"0");}catch(e){}
+}
+function labToggleDesktop(){setLabState(!document.getElementById("lab").classList.contains("collapsed"),true);}
+function labToggle(){document.getElementById("lab").classList.toggle("open");}
+try{
+  document.getElementById("lab-send").addEventListener("click",labSend);
+  document.getElementById("lab-ta").addEventListener("keydown",function(e){
+    if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();labSend();}
+  });
+  document.getElementById("lab-ta").addEventListener("input",function(){
+    this.style.height="auto";
+    this.style.height=Math.min(this.scrollHeight,120)+"px";
+  });
+}catch(e){}
+try{if(typeof lucide!=="undefined")lucide.createIcons();}catch(e){}
 </script>
 </body>
 </html>`;

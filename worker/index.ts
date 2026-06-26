@@ -24,6 +24,10 @@
 // v11.80.3: Suppress cron-driven proactive nudges and morning/night greetings during maintenance
 // v11.81.0: Split 7116-line monolith into 19 typed modules (types/db/utils/html/telegram/memory/
 //           search/apis/tools/brain/auth/agents/admin/commands/facebook/group/discord/stats/index)
+// v11.85.0: Lab Agent backend — POST /lab/agent (Gemini multi-model rotation, admin auth, privacy sanitization)
+// v11.85.3: Lab Agent UI — fixed right-side panel, chat bubbles, typewriter, localStorage history, mobile drawer
+// v11.85.4: Lab Agent collapse toggle — slide panel, button tracks edge, localStorage state, no-flash restore
+// v11.85.5: Left nav sidebar — 10 tabs, Lucide icons, tab switching, responsive (60px tablet / drawer mobile)
 // ============================================================
 
 import type { Env } from './types';
@@ -43,6 +47,7 @@ import { handleGroupMessage } from './group';
 import { handleFacebook, handleFacebookVerify } from './facebook';
 import { handleDiscord, handleDiscordRegister } from './discord';
 import { handleAdminStats, handleDashboard, handleWebChat } from './stats';
+import { handleLabAgent } from './lab';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -57,6 +62,10 @@ export default {
     if (request.method === "GET" && url.pathname === "/dashboard") return handleDashboard(request, env);
     if (request.method === "GET" && url.pathname === "/chat") return new Response(CHAT_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     if (request.method === "POST" && url.pathname === "/web-chat") return handleWebChat(request, env);
+    if (url.pathname === "/lab/agent") {
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
+      if (request.method === "POST") return handleLabAgent(request, env);
+    }
     if (request.method === "GET" && url.pathname === "/privacy") return new Response(PRIVACY_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     if (request.method === "GET" && url.pathname === "/terms") return new Response(TERMS_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     return new Response("Bizli is alive.", { status: 200 });
