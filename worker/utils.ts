@@ -247,9 +247,12 @@ export function getGroqKeys(env: Env): string[] {
     (env as any).GROQ_API_KEY_20, (env as any).GROQ_API_KEY_21].filter(Boolean);
 }
 
-export function getGeminiKeys(env: Env): string[] {
-  return [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2, env.GEMINI_API_KEY_3,
-    env.GEMINI_API_KEY_4, env.GEMINI_API_KEY_5].filter(Boolean) as string[];
+export function getGeminiKeys(env: Env, purpose: "bizli" | "lab" = "bizli"): string[] {
+  if (purpose === "lab") {
+    return [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2, env.GEMINI_API_KEY_3,
+      env.GEMINI_API_KEY_4, env.GEMINI_API_KEY_5].filter(Boolean) as string[];
+  }
+  return []; // Bizli chat no longer uses Gemini — keys reserved for Lab Agent
 }
 
 export function titleCase(s: string): string {

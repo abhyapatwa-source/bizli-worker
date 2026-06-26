@@ -4,7 +4,7 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v11.86.0";
+export const BIZLI_VERSION = "v11.87.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -280,7 +280,7 @@ export async function callGemini(
   systemExtra: string,
   opts: { search?: boolean; images?: { mime: string; data: string }[] } = {}
 ): Promise<string> {
-  const keys = getGeminiKeys(env);
+  const keys = getGeminiKeys(env, "bizli");
   if (!keys.length) return "";
   const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
   const contents = messages
@@ -476,7 +476,7 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
               }
             }
           } catch {}
-          // Tool payload rejected — same schema fails every key. Cool this key and fall to Gemini.
+          // Tool payload rejected — same schema fails every key. Cool this key and fall to OpenRouter.
           status.cooldowns[i] = Date.now() + RPM_COOLDOWN_MS;
           statusDirty = true;
           break;
@@ -734,6 +734,6 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
   const cf = await callCloudflareAI(env, flatMessages, systemExtra);
   if (cf) { await recordLastBrain(env, "CF AI"); return sanitizePersonaLeaks(cf); }
 
-  appendError(env, "ALL BRAINS FAILED — Groq+Gemini+OpenRouter+CF all returned empty").catch(() => {});
+  appendError(env, "ALL BRAINS FAILED — Groq+OpenRouter+CF all returned empty").catch(() => {});
   return "I'm a little overwhelmed right now and need a tiny breather 😮‍💨 give me a few minutes and I'll be right back — promise! 💛";
 }

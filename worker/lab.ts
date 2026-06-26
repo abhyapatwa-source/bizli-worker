@@ -46,7 +46,7 @@ export async function callLabAgent(
   messages: { role: string; content: string }[],
   dashboardData: any
 ): Promise<string> {
-  const keys = getGeminiKeys(env);
+  const keys = getGeminiKeys(env, "lab");
   if (!keys.length) return "No Gemini keys configured — Lab Agent unavailable.";
 
   const safeData = sanitizeDashboardData(JSON.parse(JSON.stringify(dashboardData)));
