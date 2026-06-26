@@ -49,6 +49,7 @@ import { handleFacebook, handleFacebookVerify } from './facebook';
 import { handleDiscord, handleDiscordRegister } from './discord';
 import { handleAdminStats, handleDashboard, handleWebChat } from './stats';
 import { handleLabAgent } from './lab';
+import { handleLabQuota } from './quota';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -63,6 +64,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/dashboard") return handleDashboard(request, env);
     if (request.method === "GET" && url.pathname === "/chat") return new Response(CHAT_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     if (request.method === "POST" && url.pathname === "/web-chat") return handleWebChat(request, env);
+    if (request.method === "GET" && url.pathname === "/lab/quota") return handleLabQuota(request, env);
     if (url.pathname === "/lab/agent") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
       if (request.method === "POST") return handleLabAgent(request, env);

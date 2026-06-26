@@ -1,5 +1,6 @@
 import type { Env } from './types';
 import { getGeminiKeys } from './utils';
+import { recordQuotaEvents, QuotaEvent } from './quota';
 
 const LAB_CORS = {
   "Content-Type": "application/json",
@@ -69,8 +70,10 @@ export async function callLabAgent(
     generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
   });
 
+  const quotaEvents: QuotaEvent[] = [];
   let lastError = "";
-  for (const key of keys) {
+  for (let ki = 0; ki < keys.length; ki++) {
+    const key = keys[ki];
     for (const model of GEMINI_MODELS) {
       try {
         const res = await fetch(
@@ -80,19 +83,27 @@ export async function callLabAgent(
         if (!res.ok) {
           const err = await res.text();
           lastError = `Gemini ${model} ${res.status}: ${err.slice(0, 200)}`;
+          quotaEvents.push({ keyIndex: ki, model, result: res.status === 429 ? "fail_429" : "fail_other" });
           continue;
         }
         const data: any = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) return text.trim();
+        if (text) {
+          quotaEvents.push({ keyIndex: ki, model, result: "ok" });
+          await recordQuotaEvents(env, quotaEvents);
+          return text.trim();
+        }
         lastError = `Empty response from ${model}`;
+        quotaEvents.push({ keyIndex: ki, model, result: "fail_other" });
         continue;
       } catch (e: any) {
         lastError = e?.message || String(e);
+        quotaEvents.push({ keyIndex: ki, model, result: "fail_other" });
         continue;
       }
     }
   }
+  await recordQuotaEvents(env, quotaEvents);
   return `Lab Agent error: ${lastError}`;
 }
 

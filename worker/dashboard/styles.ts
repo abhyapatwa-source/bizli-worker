@@ -355,4 +355,9 @@ body::before{
   .lnav-item{justify-content:center;padding:0;border-left:none}
   .lnav-item.active{background:rgba(0,212,255,.1)}
   #app{margin-left:60px!important}
-}`;
+}
+#lab-quota-bar{padding:5px 12px 6px;border-top:1px solid rgba(255,255,255,.07);flex-shrink:0}
+#lab-quota-text{font-size:.58rem;color:var(--muted);margin-bottom:3px;letter-spacing:.04em}
+#lab-quota-track{height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
+#lab-quota-fill{height:100%;width:0%;border-radius:2px;transition:width .6s ease,background .4s}
+.qgreen{background:#4ade80}.qamber{background:#fbbf24}.qred{background:#f87171}`;

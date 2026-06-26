@@ -7,6 +7,10 @@ export const RIGHT_PANEL_HTML = `<div id="lab">
     <div class="lbsys">Lab Agent online. Read-only diagnostics.</div>
   </div>
   <div id="lab-proc">Processing...</div>
+  <div id="lab-quota-bar">
+    <div id="lab-quota-text">Quota: —</div>
+    <div id="lab-quota-track"><div id="lab-quota-fill"></div></div>
+  </div>
   <div id="lab-input">
     <textarea id="lab-ta" rows="1" placeholder="Ask about system health..."></textarea>
     <button id="lab-send">&#9658;</button>

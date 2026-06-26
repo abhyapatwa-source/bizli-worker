@@ -197,6 +197,7 @@ function fetchStats(first){
         document.getElementById("lab").style.display="flex";
         document.getElementById("leftnav").style.display="flex";
         var lbtn=document.getElementById("lab-btn");if(lbtn)lbtn.style.display="flex";
+        fetchLabQuota();
         try{if(localStorage.getItem("bizli_lab_collapsed")==="1")setLabState(true,false);}catch(e){}
         try{switchTab(localStorage.getItem("bizli_nav_tab")||"overview");}catch(e){switchTab("overview");}
       }
@@ -210,8 +211,31 @@ function fetchStats(first){
 }
 
 setInterval(function(){fetchStats(false);},3000);
+setInterval(fetchLabQuota,30000);
 setInterval(tickClock,1000);
 tickClock();
+
+// QUOTA
+function updateLabQuota(d){
+  var g=d&&d.gemini;if(!g)return;
+  var total=g.totalCalls||0;
+  var cap=12000;
+  var pct=Math.min(100,Math.round((total/cap)*100));
+  var fill=document.getElementById("lab-quota-fill");
+  var text=document.getElementById("lab-quota-text");
+  if(!fill||!text)return;
+  fill.style.width=pct+"%";
+  fill.className=pct<50?"qgreen":pct<80?"qamber":"qred";
+  var warn=g.exhaustedKeyModels&&g.exhaustedKeyModels.length?" ⚠ "+g.exhaustedKeyModels.length+" exhausted":"";
+  text.textContent="Quota: "+total+"/"+cap+" calls today"+warn;
+}
+function fetchLabQuota(){
+  if(!PW)return;
+  fetch("/lab/quota?key="+encodeURIComponent(PW))
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){if(d)updateLabQuota(d);})
+    .catch(function(){});
+}
 
 // LAB AGENT
 var labHistory=[],labBusy=false,LAB_MAX=30;
