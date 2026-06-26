@@ -28,6 +28,7 @@
 // v11.85.3: Lab Agent UI — fixed right-side panel, chat bubbles, typewriter, localStorage history, mobile drawer
 // v11.85.4: Lab Agent collapse toggle — slide panel, button tracks edge, localStorage state, no-flash restore
 // v11.85.5: Left nav sidebar — 10 tabs, Lucide icons, tab switching, responsive (60px tablet / drawer mobile)
+// v11.86.0: Refactor — split DASHBOARD_HTML into 18 modules (styles/gate/topbar/leftnav/orb/rightpanel/scripts + 10 tabs)
 // ============================================================
 
 import type { Env } from './types';
