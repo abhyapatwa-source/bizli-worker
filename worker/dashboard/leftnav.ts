@@ -11,7 +11,7 @@ export const LEFTNAV_HTML = `<nav id="leftnav">
     <div class="lnav-item" data-tab="users" onclick="switchTab('users')"><i data-lucide="users"></i><span>Users</span></div>
     <div class="lnav-item" data-tab="vitals" onclick="switchTab('vitals')"><i data-lucide="activity"></i><span>Vitals</span></div>
     <div class="lnav-sep"></div>
-    <div class="lnav-item disabled" title="Phase 2"><i data-lucide="brain"></i><span>Brains</span></div>
+    <div class="lnav-item" data-tab="brains" onclick="switchTab('brains')"><i data-lucide="brain"></i><span>Brains</span></div>
     <div class="lnav-item disabled" title="Phase 2"><i data-lucide="cpu"></i><span>Models</span></div>
     <div class="lnav-item disabled" title="Phase 2"><i data-lucide="zap"></i><span>Live Feed</span></div>
     <div class="lnav-item disabled" title="Phase 2"><i data-lucide="settings"></i><span>Maintenance</span></div>

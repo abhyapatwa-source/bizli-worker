@@ -115,7 +115,8 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
   const payload = {
     version: BIZLI_VERSION,
     groq: groqData,
-    gemini: { keysConfigured: getGeminiKeys(env).length, status: "standby" },
+    gemini: { keysConfigured: getGeminiKeys(env, "lab").length, status: "standby" },
+    openrouter: { configured: !!env.OPENROUTER_API_KEY },
     workerAI: { status: "standby" },
     lastBrains,
     recentErrors,

@@ -11,7 +11,7 @@ export const DASHBOARD_SCRIPTS = `try{(function(){
   }
 })();}catch(e){}
 
-var PW="",prevN={},knownDrive=[],started=false,lastD=null;
+var PW="",prevN={},knownDrive=[],started=false,lastD=null,lastQ=null;
 
 function submitPw(){
   var v=document.getElementById("pw-input").value.trim();
@@ -164,10 +164,46 @@ function tickClock(){
   if(iel)iel.textContent=n.toLocaleString("en-IN",{timeZone:"Asia/Kolkata",dateStyle:"short",timeStyle:"medium"});
 }
 
+function updateBrains(d){
+  var groq=d.groq||[];
+  var ready=groq.filter(function(k){return k.status==="ready";}).length;
+  var total=groq.length;
+  var lastBrain=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain:"";
+  var gdot=document.getElementById("b-groq-dot");
+  var gstat=document.getElementById("b-groq-status");
+  if(gdot&&gstat){
+    if(ready===0){gstat.textContent="OFFLINE";gdot.className="bdot bdot-red";}
+    else if(ready<total){gstat.textContent="DEGRADED";gdot.className="bdot bdot-amber";}
+    else{gstat.textContent="ACTIVE";gdot.className="bdot bdot-green";}
+  }
+  var gkeys=document.getElementById("b-groq-keys");
+  if(gkeys)gkeys.textContent=ready+"/"+total+" ready";
+  var glast=document.getElementById("b-groq-last");
+  if(glast){var gl=d.lastBrains&&d.lastBrains.find(function(b){return b.brain==="groq";});glast.textContent=gl?gl.timeAgo:"never";}
+  var orActive=lastBrain==="openrouter";
+  var ordot=document.getElementById("b-or-dot");
+  var orstat=document.getElementById("b-or-status");
+  if(ordot&&orstat){ordot.className="bdot "+(orActive?"bdot-green":"bdot-standby");orstat.textContent=orActive?"ACTIVE":"STANDBY";}
+  var orkey=document.getElementById("b-or-key");
+  if(orkey)orkey.textContent=(d.openrouter&&d.openrouter.configured)?"Configured":"Not configured";
+  var orlast=document.getElementById("b-or-last");
+  if(orlast){var ol=d.lastBrains&&d.lastBrains.find(function(b){return b.brain==="openrouter";});orlast.textContent=ol?ol.timeAgo:"never";}
+  var cflast=document.getElementById("b-cf-last");
+  if(cflast){var cl=d.lastBrains&&d.lastBrains.find(function(b){return b.brain==="CF AI";});cflast.textContent=cl?cl.timeAgo:"never";}
+  var gemkeys=document.getElementById("b-gem-keys");
+  if(gemkeys)gemkeys.textContent=(d.gemini?d.gemini.keysConfigured:0)+" configured";
+  if(lastQ)updateBrainsQuota(lastQ);
+}
+function updateBrainsQuota(q){
+  var el=document.getElementById("b-gem-calls");
+  if(!el||!q||!q.gemini)return;
+  el.textContent=q.gemini.totalCalls+" today ("+q.gemini.totalSuccessful+" ok, "+q.gemini.total429+" 429s)";
+}
+
 function updateAll(d){
   lastD=d;
   updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
-  updateUsers(d);updateTools(d);updateVitals(d);
+  updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);
   setN("s-users",d.users?d.users.total:0);
   setN("s-appr",d.users?d.users.approved:0);
   setN("s-msgs",d.messages?d.messages.total:0);
@@ -233,7 +269,7 @@ function fetchLabQuota(){
   if(!PW)return;
   fetch("/lab/quota?key="+encodeURIComponent(PW))
     .then(function(r){return r.ok?r.json():null;})
-    .then(function(d){if(d)updateLabQuota(d);})
+    .then(function(d){if(d){lastQ=d;updateLabQuota(d);updateBrainsQuota(d);}})
     .catch(function(){});
 }
 
