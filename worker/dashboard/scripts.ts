@@ -200,9 +200,33 @@ function updateBrainsQuota(q){
   el.textContent=q.gemini.totalCalls+" today ("+q.gemini.totalSuccessful+" ok, "+q.gemini.total429+" 429s)";
 }
 
+function updateHealth(d){
+  var ready=d.groq?d.groq.filter(function(k){return k.status==="ready";}).length:0;
+  var keyScore=ready/16;
+  var errCount=0;
+  if(d.recentErrors&&d.recentErrors.length){
+    var cutoff=Date.now()-3600000;
+    d.recentErrors.forEach(function(e){
+      if(!e.timestamp||new Date(e.timestamp).getTime()>=cutoff)errCount++;
+    });
+  }
+  var errBonus=errCount===0?1.0:errCount<=3?0.5:0.0;
+  var pct=Math.round((keyScore*0.5+errBonus*0.3+1.0*0.2)*100);
+  var cls,lbl;
+  if(pct>=95){cls="h-green";lbl="EXCELLENT";}
+  else if(pct>=80){cls="h-green";lbl="HEALTHY";}
+  else if(pct>=60){cls="h-amber";lbl="DEGRADED";}
+  else if(pct>=40){cls="h-amber";lbl="WARNING";}
+  else{cls="h-red";lbl="CRITICAL";}
+  var el=document.getElementById("health-pct");if(!el)return;
+  el.className=cls;
+  el.querySelector(".h-num").textContent=pct+"%";
+  el.querySelector(".h-lbl").textContent=lbl;
+}
+
 function updateAll(d){
   lastD=d;
-  updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
+  updateHealth(d);updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
   updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);
   setN("s-users",d.users?d.users.total:0);
   setN("s-appr",d.users?d.users.approved:0);

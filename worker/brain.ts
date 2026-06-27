@@ -4,7 +4,7 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v11.88.0";
+export const BIZLI_VERSION = "v11.89.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

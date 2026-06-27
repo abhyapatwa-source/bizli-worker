@@ -27,7 +27,18 @@ body::before{
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:lpulse 1.4s ease-in-out infinite;box-shadow:0 0 7px var(--green)}
 @keyframes lpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
 .live-txt{color:var(--green);font-size:.75rem;letter-spacing:.12em}
-#sync-time{margin-left:auto;color:var(--muted);font-size:.75rem;letter-spacing:.04em}
+#sync-time{color:var(--muted);font-size:.75rem;letter-spacing:.04em}
+#health-pct{display:flex;align-items:center;gap:5px;margin:0 auto;font-size:.75rem;letter-spacing:.1em}
+.h-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .5s,box-shadow .5s}
+.h-num{font-weight:700}
+.h-lbl{letter-spacing:.12em;color:var(--muted)}
+#health-pct.h-green .h-dot{background:var(--green);box-shadow:0 0 7px var(--green)}
+#health-pct.h-green .h-num{color:var(--green)}
+#health-pct.h-amber .h-dot{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+#health-pct.h-amber .h-num{color:var(--amber)}
+#health-pct.h-red .h-dot{background:var(--red);box-shadow:0 0 6px var(--red)}
+#health-pct.h-red .h-num{color:var(--red)}
+@media(max-width:600px){.h-lbl{display:none}}
 #gate{
   position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;
   background:rgba(6,9,18,.97);backdrop-filter:blur(10px);
