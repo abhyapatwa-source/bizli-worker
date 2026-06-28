@@ -322,4 +322,42 @@ Verify:
 
 ---
 
+## AUTOMATIC RITUALS
+
+### AT SESSION START — Always do these without being asked:
+1. Read CLAUDE.md in full
+2. Read CHECKPOINT.md in full
+3. Run: git status
+4. Run: git log -3 --oneline
+5. Find current version: type worker\brain.ts | findstr BIZLI_VERSION
+6. Quick health check: curl -s "https://bizli-worker.bizlibix.workers.dev/admin/stats?key=<ADMIN_PASSWORD>" | head -c 100
+7. Summarize current state to Abhya in 5 lines or less
+8. Then wait for instructions
+
+### AT SESSION END — When Abhya says "stop", "exit", "done", "rest", "goodnight":
+1. Update CHECKPOINT.md with:
+   - Date of session
+   - What we did this session
+   - What's pending next session
+   - Any decisions made
+   - Any new bugs/ideas discovered
+2. Update CLAUDE.md ONLY if architecture or phase structure changed
+3. Commit: git add . && git commit -m "checkpoint: <2-line summary>"
+4. Push: git push origin main
+5. Confirm to Abhya: "Saved. You can resume tomorrow."
+
+### WHEN TOKENS HIT 10% OR LOWER — Emergency save:
+1. Stop current edit work immediately
+2. Save anything in progress to CHECKPOINT.md under section "EMERGENCY SAVE"
+3. Commit + push as "emergency checkpoint: <what was in progress>"
+4. Tell Abhya: "Token limit approaching. All progress saved. Please /exit and restart later with fresh tokens. We left off at: <state>"
+
+### WHEN ABHYA TELLS YOU AN IDEA — Add it to backlog:
+1. Open CLAUDE.md
+2. Add the idea under "## IDEAS BACKLOG" section
+3. Include: idea description, suggested phase, whether to ask before implementing
+4. Confirm: "Idea saved to backlog."
+
+---
+
 End of CLAUDE.md
