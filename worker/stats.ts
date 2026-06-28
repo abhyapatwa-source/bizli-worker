@@ -56,9 +56,16 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
   const groqData = groqKeys.map((_, i) => {
     const cd = gStatus.cooldowns[i] || 0;
     const remaining = cd - now;
-    if (remaining <= 0) return { name: KEY_NAMES[i] || `Key${i}`, status: "ready", secondsLeft: 0 };
-    const kind = remaining > 60_000 ? "tpd_cooling" : "rpm_cooling";
-    return { name: KEY_NAMES[i] || `Key${i}`, status: kind, secondsLeft: Math.ceil(remaining / 1000) };
+    if (remaining > 0) {
+      const kind = remaining > 60_000 ? "tpd_cooling" : "rpm_cooling";
+      return { name: KEY_NAMES[i] || `Key${i}`, status: kind, secondsLeft: Math.ceil(remaining / 1000) };
+    }
+    const mc: Record<string, number> = (gStatus as any).mc || {};
+    const slots = ["70b", "mav", "sct"];
+    const anyReady = slots.some(slot => (mc[`${i}_${slot}`] || 0) <= now);
+    if (anyReady) return { name: KEY_NAMES[i] || `Key${i}`, status: "ready", secondsLeft: 0 };
+    const maxExpiry = Math.max(...slots.map(slot => mc[`${i}_${slot}`] || 0));
+    return { name: KEY_NAMES[i] || `Key${i}`, status: "rpm_cooling", secondsLeft: Math.ceil((maxExpiry - now) / 1000) };
   });
 
   let lastBrains: { brain: string; key?: number; timeAgo: string }[] = [];

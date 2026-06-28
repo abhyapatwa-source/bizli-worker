@@ -4,9 +4,15 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v11.89.0";
+export const BIZLI_VERSION = "v11.90.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
+
+const GROQ_TEXT_MODELS = [
+  { id: "llama-3.3-70b-versatile",                       slot: "70b" },
+  { id: "meta-llama/llama-4-maverick-17b-128e-instruct", slot: "mav" },
+  { id: "meta-llama/llama-4-scout-17b-16e-instruct",     slot: "sct" },
+];
 
 function msUntilMidnightUTC(): number {
   const now = new Date();
@@ -129,14 +135,15 @@ export const PHRASE_REPLACEMENTS: [RegExp, string][] = [
 
 export const IMG_MARKER = "\n\n__BIZLI_IMG__:";
 
-interface GroqStatus { ptr: number; cooldowns: Record<number, number>; }
+interface GroqStatus { ptr: number; cooldowns: Record<number, number>; mc: Record<string, number>; }
 
 export async function getGroqStatus(env: Env): Promise<GroqStatus> {
   try {
     const val = await env.BIZLI_MEMORY.get("groq_status");
-    if (!val) return { ptr: 0, cooldowns: {} };
-    return JSON.parse(val);
-  } catch { return { ptr: 0, cooldowns: {} }; }
+    if (!val) return { ptr: 0, cooldowns: {}, mc: {} };
+    const p = JSON.parse(val);
+    return { ptr: p.ptr ?? 0, cooldowns: p.cooldowns ?? {}, mc: p.mc ?? {} };
+  } catch { return { ptr: 0, cooldowns: {}, mc: {} }; }
 }
 
 export async function saveGroqStatus(env: Env, status: GroqStatus): Promise<void> {
@@ -191,7 +198,10 @@ export async function groqExhausted(env: Env): Promise<boolean> {
   if (!keys.length) return true;
   const status = await getGroqStatus(env);
   const now = Date.now();
-  return keys.every((_, i) => (status.cooldowns[i] || 0) > now);
+  return keys.every((_, i) => {
+    if ((status.cooldowns[i] || 0) > now) return true;
+    return GROQ_TEXT_MODELS.every(({ slot }) => (status.mc[`${i}_${slot}`] || 0) > now);
+  });
 }
 
 function imageTopicForTool(toolName: string, args: any): string {
@@ -415,287 +425,304 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
   const keys = getGroqKeys(env);
   if (!keys.length) throw new Error("No Groq keys");
   const status = await getGroqStatus(env);
+  if (!status.mc) status.mc = {};
   const order = buildKeyOrder(keys, status);
   let statusDirty = false;
   const hasVisionContent = messages.some((m: any) =>
     Array.isArray(m.content) && m.content.some((c: any) => c.type === "image_url")
   );
-  const MODEL = hasVisionContent
-    ? "meta-llama/llama-4-scout-17b-16e-instruct"
-    : "llama-3.3-70b-versatile";
   let gifSent = false;
-  for (const i of order) {
+
+  outerLoop: for (const i of order) {
     if ((status.cooldowns[i] || 0) - Date.now() > 60_000) continue;
-    try {
-      const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
-      const body: any = {
-        model: MODEL,
-        messages: [{ role: "system", content: system }, ...messages],
-        temperature: 0.75,
-        max_tokens: 512,
-      };
-      if (handleTools && chatId) {
-        body.tools = userSentGif ? BIZLI_TOOLS : BIZLI_TOOLS.filter((t: any) => t.function.name !== "send_gif");
-        body.tool_choice = "auto";
-        body.max_tokens = 512;
-      }
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[i]}` },
-        body: JSON.stringify(body),
-      });
-      if (res.status === 429) {
-        const retryAfterSec = res.headers.get("retry-after");
-        const errBody = await res.text().catch(() => "");
-        const kind = classifyRateLimit(errBody);
-        const cooldownMs = retryAfterSec
-          ? (parseInt(retryAfterSec) + 2) * 1000
-          : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
-        status.cooldowns[i] = Date.now() + cooldownMs;
+
+    const modelsToTry = hasVisionContent
+      ? [{ id: "meta-llama/llama-4-scout-17b-16e-instruct", slot: "vis" }]
+      : GROQ_TEXT_MODELS;
+
+    for (const { id: usedModel, slot } of modelsToTry) {
+      if (!hasVisionContent && (status.mc[`${i}_${slot}`] || 0) > Date.now()) continue;
+
+      try {
+        const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
+        const body: any = {
+          model: usedModel,
+          messages: [{ role: "system", content: system }, ...messages],
+          temperature: 0.75,
+          max_tokens: 512,
+        };
+        if (handleTools && chatId) {
+          body.tools = userSentGif ? BIZLI_TOOLS : BIZLI_TOOLS.filter((t: any) => t.function.name !== "send_gif");
+          body.tool_choice = "auto";
+          body.max_tokens = 512;
+        }
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[i]}` },
+          body: JSON.stringify(body),
+        });
+        if (res.status === 429) {
+          const retryAfterSec = res.headers.get("retry-after");
+          const errBody = await res.text().catch(() => "");
+          const kind = classifyRateLimit(errBody);
+          const cooldownMs = retryAfterSec
+            ? (parseInt(retryAfterSec) + 2) * 1000
+            : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
+          if (hasVisionContent) {
+            status.cooldowns[i] = Date.now() + cooldownMs;
+          } else {
+            status.mc[`${i}_${slot}`] = Date.now() + cooldownMs;
+          }
+          statusDirty = true;
+          continue;
+        }
+        if (!res.ok) {
+          const errSnippet = await res.text().catch(() => "").then(t => t.slice(0, 120));
+          console.error(`[Groq key ${i} slot ${slot}] HTTP ${res.status}: ${errSnippet}`);
+          appendError(env, `Groq key ${i}/${slot} HTTP ${res.status}: ${errSnippet}`).catch(() => {});
+          if (!hasVisionContent && (res.status === 404 || (res.status === 400 && errSnippet.toLowerCase().includes("model not found")))) {
+            status.mc[`${i}_${slot}`] = Date.now() + 86_400_000;
+            statusDirty = true;
+            continue;
+          }
+          if (res.status === 400 && handleTools && chatId) {
+            try {
+              const ntRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[i]}` },
+                body: JSON.stringify({ model: usedModel, messages: [{ role: "system", content: system }, ...messages], temperature: 0.75, max_tokens: 512 }),
+              });
+              if (ntRes.ok) {
+                const ntData = await ntRes.json() as any;
+                const ntText = ntData?.choices?.[0]?.message?.content || "";
+                if (ntText) {
+                  if (statusDirty) await saveGroqStatus(env, status);
+                  await recordLastBrain(env, "Groq", i);
+                  return sanitizePersonaLeaks(ntText.trim());
+                }
+              }
+            } catch {}
+            // Tool payload rejected — same schema fails every key. Cool this key and fall to OpenRouter.
+            status.cooldowns[i] = Date.now() + RPM_COOLDOWN_MS;
+            statusDirty = true;
+            break outerLoop;
+          }
+          continue;
+        }
+        const data = await res.json() as any;
+        const choice = data?.choices?.[0];
+        if (!choice) continue;
+
+        status.ptr = (i + 1) % keys.length;
         statusDirty = true;
-        continue;
-      }
-      if (!res.ok) {
-        const errSnippet = await res.text().catch(() => "").then(t => t.slice(0, 120));
-        console.error(`[Groq key ${i}] HTTP ${res.status}: ${errSnippet}`);
-        appendError(env, `Groq key ${i} HTTP ${res.status}: ${errSnippet}`).catch(() => {});
-        if (res.status === 400 && handleTools && chatId) {
-          try {
-            const ntRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+
+        if (handleTools && choice.message?.tool_calls?.length > 0 && chatId) {
+          const toolCalls = choice.message.tool_calls;
+          const toolMessages = [...messages, { role: "assistant", content: choice.message.content || "", tool_calls: toolCalls }];
+          let imageSubject = "";
+          let imageSource: "movie" | "wiki" | "" = "";
+
+          for (const tc of toolCalls) {
+            const toolName = tc.function.name;
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let result: string;
+            if (toolName === "send_gif" && gifSent) {
+              result = "gif_sent";
+            } else {
+              result = await executeTool(env, toolName, args, chatId);
+              if (toolName === "send_gif" && result === "gif_sent") gifSent = true;
+              if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
+            }
+            if (!imageSubject) {
+              if (toolName === "get_movie_info") { imageSubject = args.title || ""; imageSource = "movie"; }
+              else if (toolName === "get_country_info") { imageSubject = args.country || ""; imageSource = "wiki"; }
+              else if (toolName === "get_recipe") { imageSubject = args.dish || ""; imageSource = "wiki"; }
+              else if (toolName === "search_web") { imageSubject = args.query || ""; imageSource = "wiki"; }
+            }
+            toolMessages.push({ role: "tool", tool_call_id: tc.id, content: result });
+          }
+
+          if (gifSent) { await saveGroqStatus(env, status); await recordLastBrain(env, "Groq", i); return "GIF_SENT"; }
+
+          const synthCandidates = order.filter(k => k !== i && (status.cooldowns[k] || 0) <= Date.now());
+          if (!synthCandidates.length) synthCandidates.push(i);
+          let finalText = "";
+          for (const sk of synthCandidates.slice(0, 3)) {
+            const sRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
               method: "POST",
-              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[i]}` },
-              body: JSON.stringify({ model: MODEL, messages: [{ role: "system", content: system }, ...messages], temperature: 0.75, max_tokens: 512 }),
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[sk]}` },
+              body: JSON.stringify({ model: usedModel, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
             });
-            if (ntRes.ok) {
-              const ntData = await ntRes.json() as any;
-              const ntText = ntData?.choices?.[0]?.message?.content || "";
-              if (ntText) {
-                if (statusDirty) await saveGroqStatus(env, status);
-                await recordLastBrain(env, "Groq", i);
-                return sanitizePersonaLeaks(ntText.trim());
+            if (sRes.status === 429) {
+              const retryAfterSec = sRes.headers.get("retry-after");
+              const errBody = await sRes.text().catch(() => "");
+              const kind = classifyRateLimit(errBody);
+              const cooldownMs = retryAfterSec ? (parseInt(retryAfterSec) + 2) * 1000 : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
+              status.cooldowns[sk] = Date.now() + cooldownMs;
+              statusDirty = true;
+              appendError(env, `Groq synthesis key ${sk} 429: ${cooldownMs}ms cooldown`).catch(() => {});
+              continue;
+            }
+            if (!sRes.ok) {
+              const snip = await sRes.text().catch(() => "").then(t => t.slice(0, 120));
+              appendError(env, `Groq synthesis HTTP ${sRes.status}: ${snip}`).catch(() => {});
+              continue;
+            }
+            const sData = await sRes.json() as any;
+            finalText = sData?.choices?.[0]?.message?.content || "";
+            if (finalText) break;
+          }
+          await saveGroqStatus(env, status);
+          await recordLastBrain(env, "Groq", i);
+          if (finalText) {
+            const cleanFinal = sanitizePersonaLeaks(finalText.trim());
+            if (imageSubject && imageSource) {
+              const imgUrl = imageSource === "movie"
+                ? (await getMoviePoster(env, imageSubject)) || (await getWikiImage(imageSubject))
+                : await getWikiImage(imageSubject);
+              if (imgUrl && await sendImageCard(env, chatId, cleanFinal, imgUrl)) {
+                return "RICH_SENT:" + cleanFinal;
               }
             }
-          } catch {}
-          // Tool payload rejected — same schema fails every key. Cool this key and fall to OpenRouter.
-          status.cooldowns[i] = Date.now() + RPM_COOLDOWN_MS;
-          statusDirty = true;
-          break;
-        }
-        continue;
-      }
-      const data = await res.json() as any;
-      const choice = data?.choices?.[0];
-      if (!choice) continue;
-
-      status.ptr = (i + 1) % keys.length;
-      statusDirty = true;
-
-      if (handleTools && choice.message?.tool_calls?.length > 0 && chatId) {
-        const toolCalls = choice.message.tool_calls;
-        const toolMessages = [...messages, { role: "assistant", content: choice.message.content || "", tool_calls: toolCalls }];
-        let imageSubject = "";
-        let imageSource: "movie" | "wiki" | "" = "";
-
-        for (const tc of toolCalls) {
-          const toolName = tc.function.name;
-          const args = JSON.parse(tc.function.arguments || "{}");
-          let result: string;
-          if (toolName === "send_gif" && gifSent) {
-            result = "gif_sent";
-          } else {
-            result = await executeTool(env, toolName, args, chatId);
-            if (toolName === "send_gif" && result === "gif_sent") gifSent = true;
-            if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
+            return cleanFinal;
           }
-          if (!imageSubject) {
-            if (toolName === "get_movie_info") { imageSubject = args.title || ""; imageSource = "movie"; }
-            else if (toolName === "get_country_info") { imageSubject = args.country || ""; imageSource = "wiki"; }
-            else if (toolName === "get_recipe") { imageSubject = args.dish || ""; imageSource = "wiki"; }
-            else if (toolName === "search_web") { imageSubject = args.query || ""; imageSource = "wiki"; }
-          }
-          toolMessages.push({ role: "tool", tool_call_id: tc.id, content: result });
+          const toolResultFallback = toolMessages.filter((m: any) => m.role === "tool").map((m: any) => m.content).join("\n\n");
+          return sanitizePersonaLeaks(toolResultFallback || choice.message?.content || "");
         }
 
-        if (gifSent) { await saveGroqStatus(env, status); await recordLastBrain(env, "Groq", i); return "GIF_SENT"; }
+        const text = choice.message?.content || "";
+        if (!text) continue;
 
-        const synthCandidates = order.filter(k => k !== i && (status.cooldowns[k] || 0) <= Date.now());
-        if (!synthCandidates.length) synthCandidates.push(i);
-        let finalText = "";
-        for (const sk of synthCandidates.slice(0, 3)) {
-          const sRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        const fnMatch = text.match(/<function[=(](\w+)[>)]>?\s*(\{[^}]*\})?\s*<\/function>/);
+
+        if (handleTools && fnMatch && chatId) {
+          const toolName = fnMatch[1];
+          let args: any = {};
+          try { args = fnMatch[2] ? JSON.parse(fnMatch[2]) : {}; } catch {}
+          const result = await executeTool(env, toolName, args, chatId);
+          if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
+          const cleanedText = text.replace(fnMatch[0], "").trim();
+          const toolMessages = [
+            ...messages,
+            { role: "assistant", content: cleanedText || "" },
+            { role: "user", content: `[Tool result for ${toolName}]: ${result}\n\nReply naturally using this info.` },
+          ];
+          const synthKey = order.find(k => k !== i && (status.cooldowns[k] || 0) <= Date.now()) ?? i;
+          const finalRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[sk]}` },
-            body: JSON.stringify({ model: MODEL, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[synthKey]}` },
+            body: JSON.stringify({ model: usedModel, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
           });
-          if (sRes.status === 429) {
-            const retryAfterSec = sRes.headers.get("retry-after");
-            const errBody = await sRes.text().catch(() => "");
+          if (finalRes.status === 429) {
+            const retryAfterSec = finalRes.headers.get("retry-after");
+            const errBody = await finalRes.text().catch(() => "");
             const kind = classifyRateLimit(errBody);
             const cooldownMs = retryAfterSec ? (parseInt(retryAfterSec) + 2) * 1000 : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
-            status.cooldowns[sk] = Date.now() + cooldownMs;
+            status.cooldowns[synthKey] = Date.now() + cooldownMs;
             statusDirty = true;
-            appendError(env, `Groq synthesis key ${sk} 429: ${cooldownMs}ms cooldown`).catch(() => {});
-            continue;
           }
-          if (!sRes.ok) {
-            const snip = await sRes.text().catch(() => "").then(t => t.slice(0, 120));
-            appendError(env, `Groq synthesis HTTP ${sRes.status}: ${snip}`).catch(() => {});
-            continue;
-          }
-          const sData = await sRes.json() as any;
-          finalText = sData?.choices?.[0]?.message?.content || "";
-          if (finalText) break;
-        }
-        await saveGroqStatus(env, status);
-        await recordLastBrain(env, "Groq", i);
-        if (finalText) {
-          const cleanFinal = sanitizePersonaLeaks(finalText.trim());
-          if (imageSubject && imageSource) {
-            const imgUrl = imageSource === "movie"
-              ? (await getMoviePoster(env, imageSubject)) || (await getWikiImage(imageSubject))
-              : await getWikiImage(imageSubject);
-            if (imgUrl && await sendImageCard(env, chatId, cleanFinal, imgUrl)) {
-              return "RICH_SENT:" + cleanFinal;
+          if (finalRes.ok) {
+            const finalData = await finalRes.json() as any;
+            const finalText = finalData?.choices?.[0]?.message?.content || "";
+            if (finalText) {
+              await saveGroqStatus(env, status);
+              await recordLastBrain(env, "Groq", i);
+              return sanitizePersonaLeaks(finalText.trim());
             }
           }
-          return cleanFinal;
+          return sanitizePersonaLeaks(result);
         }
-        const toolResultFallback = toolMessages.filter((m: any) => m.role === "tool").map((m: any) => m.content).join("\n\n");
-        return sanitizePersonaLeaks(toolResultFallback || choice.message?.content || "");
-      }
 
-      const text = choice.message?.content || "";
-      if (!text) continue;
-
-      const fnMatch = text.match(/<function[=(](\w+)[>)]>?\s*(\{[^}]*\})?\s*<\/function>/);
-
-      if (handleTools && fnMatch && chatId) {
-        const toolName = fnMatch[1];
-        let args: any = {};
-        try { args = fnMatch[2] ? JSON.parse(fnMatch[2]) : {}; } catch {}
-        const result = await executeTool(env, toolName, args, chatId);
-        if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
-        const cleanedText = text.replace(fnMatch[0], "").trim();
-        const toolMessages = [
-          ...messages,
-          { role: "assistant", content: cleanedText || "" },
-          { role: "user", content: `[Tool result for ${toolName}]: ${result}\n\nReply naturally using this info.` },
-        ];
-        const synthKey = order.find(k => k !== i && (status.cooldowns[k] || 0) <= Date.now()) ?? i;
-        const finalRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[synthKey]}` },
-          body: JSON.stringify({ model: MODEL, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
-        });
-        if (finalRes.status === 429) {
-          const retryAfterSec = finalRes.headers.get("retry-after");
-          const errBody = await finalRes.text().catch(() => "");
-          const kind = classifyRateLimit(errBody);
-          const cooldownMs = retryAfterSec ? (parseInt(retryAfterSec) + 2) * 1000 : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
-          status.cooldowns[synthKey] = Date.now() + cooldownMs;
-          statusDirty = true;
-        }
-        if (finalRes.ok) {
-          const finalData = await finalRes.json() as any;
-          const finalText = finalData?.choices?.[0]?.message?.content || "";
-          if (finalText) {
-            await saveGroqStatus(env, status);
-            await recordLastBrain(env, "Groq", i);
-            return sanitizePersonaLeaks(finalText.trim());
+        const toolNameSet = new Set(BIZLI_TOOLS.map((t: any) => t.function.name));
+        const pyMatch = !fnMatch ? text.match(/\b(\w+)\s*\(([^)]*)\)/) : null;
+        if (handleTools && pyMatch && toolNameSet.has(pyMatch[1]) && chatId) {
+          const toolName = pyMatch[1];
+          const args = parsePythonArgs(pyMatch[2] || "");
+          const result = await executeTool(env, toolName, args, chatId);
+          if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
+          const cleanedText = text.replace(pyMatch[0], "").trim();
+          const toolMessages = [
+            ...messages,
+            { role: "assistant", content: cleanedText || "" },
+            { role: "user", content: `[Tool result for ${toolName}]: ${result}\n\nReply naturally using this info.` },
+          ];
+          const synthKey = order.find(k => k !== i && (status.cooldowns[k] || 0) <= Date.now()) ?? i;
+          const finalRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[synthKey]}` },
+            body: JSON.stringify({ model: usedModel, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
+          });
+          if (finalRes.status === 429) {
+            const retryAfterSec = finalRes.headers.get("retry-after");
+            const errBody = await finalRes.text().catch(() => "");
+            const kind = classifyRateLimit(errBody);
+            const cooldownMs = retryAfterSec ? (parseInt(retryAfterSec) + 2) * 1000 : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
+            status.cooldowns[synthKey] = Date.now() + cooldownMs;
+            statusDirty = true;
           }
-        }
-        return sanitizePersonaLeaks(result);
-      }
-
-      const toolNameSet = new Set(BIZLI_TOOLS.map((t: any) => t.function.name));
-      const pyMatch = !fnMatch ? text.match(/\b(\w+)\s*\(([^)]*)\)/) : null;
-      if (handleTools && pyMatch && toolNameSet.has(pyMatch[1]) && chatId) {
-        const toolName = pyMatch[1];
-        const args = parsePythonArgs(pyMatch[2] || "");
-        const result = await executeTool(env, toolName, args, chatId);
-        if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
-        const cleanedText = text.replace(pyMatch[0], "").trim();
-        const toolMessages = [
-          ...messages,
-          { role: "assistant", content: cleanedText || "" },
-          { role: "user", content: `[Tool result for ${toolName}]: ${result}\n\nReply naturally using this info.` },
-        ];
-        const synthKey = order.find(k => k !== i && (status.cooldowns[k] || 0) <= Date.now()) ?? i;
-        const finalRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[synthKey]}` },
-          body: JSON.stringify({ model: MODEL, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
-        });
-        if (finalRes.status === 429) {
-          const retryAfterSec = finalRes.headers.get("retry-after");
-          const errBody = await finalRes.text().catch(() => "");
-          const kind = classifyRateLimit(errBody);
-          const cooldownMs = retryAfterSec ? (parseInt(retryAfterSec) + 2) * 1000 : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
-          status.cooldowns[synthKey] = Date.now() + cooldownMs;
-          statusDirty = true;
-        }
-        if (finalRes.ok) {
-          const finalData = await finalRes.json() as any;
-          const finalText = finalData?.choices?.[0]?.message?.content || "";
-          if (finalText) {
-            await saveGroqStatus(env, status);
-            await recordLastBrain(env, "Groq", i);
-            return sanitizePersonaLeaks(finalText.trim());
+          if (finalRes.ok) {
+            const finalData = await finalRes.json() as any;
+            const finalText = finalData?.choices?.[0]?.message?.content || "";
+            if (finalText) {
+              await saveGroqStatus(env, status);
+              await recordLastBrain(env, "Groq", i);
+              return sanitizePersonaLeaks(finalText.trim());
+            }
           }
+          return sanitizePersonaLeaks(result);
         }
-        return sanitizePersonaLeaks(result);
-      }
 
-      const fusedMatch = (!fnMatch && !pyMatch)
-        ? text.match(new RegExp(`\\b(${[...toolNameSet].join("|")})(\\{[^\\}]*\\})`))
-        : null;
-      if (handleTools && fusedMatch && toolNameSet.has(fusedMatch[1]) && chatId) {
-        const toolName = fusedMatch[1];
-        let args: any = {};
-        try { args = JSON.parse(fusedMatch[2]); } catch {}
-        const result = await executeTool(env, toolName, args, chatId);
-        if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
-        const cleanedText = text.replace(fusedMatch[0], "").trim();
-        const toolMessages = [
-          ...messages,
-          { role: "assistant", content: cleanedText || "" },
-          { role: "user", content: `[Tool result for ${toolName}]: ${result}\n\nReply naturally using this info.` },
-        ];
-        const synthKey = order.find(k => k !== i && (status.cooldowns[k] || 0) <= Date.now()) ?? i;
-        const finalRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[synthKey]}` },
-          body: JSON.stringify({ model: MODEL, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
-        });
-        if (finalRes.status === 429) {
-          const retryAfterSec = finalRes.headers.get("retry-after");
-          const errBody = await finalRes.text().catch(() => "");
-          const kind = classifyRateLimit(errBody);
-          const cooldownMs = retryAfterSec ? (parseInt(retryAfterSec) + 2) * 1000 : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
-          status.cooldowns[synthKey] = Date.now() + cooldownMs;
-          statusDirty = true;
-        }
-        if (finalRes.ok) {
-          const finalData = await finalRes.json() as any;
-          const finalText = finalData?.choices?.[0]?.message?.content || "";
-          if (finalText) {
-            await saveGroqStatus(env, status);
-            await recordLastBrain(env, "Groq", i);
-            return sanitizePersonaLeaks(finalText.trim());
+        const fusedMatch = (!fnMatch && !pyMatch)
+          ? text.match(new RegExp(`\\b(${[...toolNameSet].join("|")})(\\{[^\\}]*\\})`))
+          : null;
+        if (handleTools && fusedMatch && toolNameSet.has(fusedMatch[1]) && chatId) {
+          const toolName = fusedMatch[1];
+          let args: any = {};
+          try { args = JSON.parse(fusedMatch[2]); } catch {}
+          const result = await executeTool(env, toolName, args, chatId);
+          if (result === "IMAGE_GENERATED") { await saveGroqStatus(env, status); return "IMAGE_GENERATED"; }
+          const cleanedText = text.replace(fusedMatch[0], "").trim();
+          const toolMessages = [
+            ...messages,
+            { role: "assistant", content: cleanedText || "" },
+            { role: "user", content: `[Tool result for ${toolName}]: ${result}\n\nReply naturally using this info.` },
+          ];
+          const synthKey = order.find(k => k !== i && (status.cooldowns[k] || 0) <= Date.now()) ?? i;
+          const finalRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[synthKey]}` },
+            body: JSON.stringify({ model: usedModel, messages: [{ role: "system", content: system }, ...toolMessages], tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
+          });
+          if (finalRes.status === 429) {
+            const retryAfterSec = finalRes.headers.get("retry-after");
+            const errBody = await finalRes.text().catch(() => "");
+            const kind = classifyRateLimit(errBody);
+            const cooldownMs = retryAfterSec ? (parseInt(retryAfterSec) + 2) * 1000 : kind === "tpd" ? msUntilMidnightUTC() : RPM_COOLDOWN_MS;
+            status.cooldowns[synthKey] = Date.now() + cooldownMs;
+            statusDirty = true;
           }
+          if (finalRes.ok) {
+            const finalData = await finalRes.json() as any;
+            const finalText = finalData?.choices?.[0]?.message?.content || "";
+            if (finalText) {
+              await saveGroqStatus(env, status);
+              await recordLastBrain(env, "Groq", i);
+              return sanitizePersonaLeaks(finalText.trim());
+            }
+          }
+          return sanitizePersonaLeaks(result);
         }
-        return sanitizePersonaLeaks(result);
-      }
 
-      await saveGroqStatus(env, status);
-      await recordLastBrain(env, "Groq", i);
-      const TOOL_LEAK_RE = new RegExp(
-        `\\b(${BIZLI_TOOLS.map((t: any) => t.function.name).join("|")})\\s*\\([^)]*\\)`,
-        "g"
-      );
-      const cleanText = text.trim().replace(TOOL_LEAK_RE, "").trim();
-      return sanitizePersonaLeaks(cleanText || text.trim());
-    } catch { continue; }
+        await saveGroqStatus(env, status);
+        await recordLastBrain(env, "Groq", i);
+        const TOOL_LEAK_RE = new RegExp(
+          `\\b(${BIZLI_TOOLS.map((t: any) => t.function.name).join("|")})\\s*\\([^)]*\\)`,
+          "g"
+        );
+        const cleanText = text.trim().replace(TOOL_LEAK_RE, "").trim();
+        return sanitizePersonaLeaks(cleanText || text.trim());
+      } catch { continue; }
+    }
   }
   if (statusDirty) await saveGroqStatus(env, status);
 
