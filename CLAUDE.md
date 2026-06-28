@@ -1,21 +1,325 @@
-# Bizli Project — Standing Rules for Every Session
+# BIZLI AI — Project Context
 
-## How to work with Abhya
+## THE MISSION
 
-1. **Read BIZLI_HANDOFF.md first.** At the start of every session, read it for full context — architecture, secrets, quota facts, and hard-won lessons. Never skip this.
+Bizli is a warm, emotionally intelligent AI companion built for **international users from every side of the world**. She is named after my late pet cat — a memorial project that has grown into something real.
 
-2. **Propose complete features, not one-liners.** Analyze deeply before proposing. When Abhya asks what to build, present the full plan — all the moving parts, what changes where, what risks exist — and get an explicit "yes" before starting. Don't drip out work in tiny one-line proposals.
+She is NOT an Indian-only bot. She serves users globally, in their own languages, with their own cultural context. She is feminine, genuine, conversational — and she remembers what matters to people.
 
-3. **Build autonomously once approved.** After Abhya says yes, execute the full agreed plan in one go: read all relevant files, make all the edits, fix any type errors you introduce, without stopping to ask permission for each file touch. Don't stop mid-build to ask "should I continue?" — finish what was agreed.
+### Global from day one
+- **Multilingual by design** — auto-detects user's language and replies in it
+- **Multi-script** — Latin, Devanagari, Arabic, CJK, Cyrillic, Korean, etc.
+- **Cross-cultural tools** — weather, time, currency, movies work worldwide
+- **Multi-platform** — Telegram, Discord, Facebook, Web Chat (WhatsApp coming)
+- **Time zones accurate globally** — not just Indian timezones
+- **Cultural sensitivity** — no assumed references, localized when possible
 
-4. **Fix your own errors.** If tsc catches a type error you introduced, fix it yourself before reporting. Don't hand broken code back to Abhya.
+---
 
-5. **Run tsc before deploy.** Before any `npx wrangler deploy`, run:
-   ```
-   tsc --noEmit --target es2021 --skipLibCheck worker/index.ts
-   ```
-   Ignore expected ambient-type warnings for ScheduledEvent / ExecutionContext / KVNamespace. Fix any real errors before proceeding.
+## WHO I AM (Abhya)
 
-6. **Always ask before deploying. Never deploy unilaterally.** Even if tsc passes, stop and tell Abhya: "tsc clean — ready to deploy, say the word." Wait for an explicit yes. This rule has no exceptions.
+- 21-year-old solo developer in Kolkata, India
+- I communicate naturally in English with occasional Hindi
+- **DO NOT use forced Hindi-English code-switching with me** — just clear English
+- I've invested 3,000+ hours building Bizli
+- I work 6-8 hours/day, deadline July 5-7, 2026 (~7 days from June 28)
+- I'm @supreme_aby on Telegram (admin)
+- Admin password: stored in Cloudflare secret ADMIN_PASSWORD (do not log or commit)
 
-7. **Be brutally honest about risks.** Flag anything that could exhaust API keys, break existing features, over-scope the build, or cause production incidents — especially key exhaustion (every per-message model call multiplies usage; one extra Groq call per message can exhaust all 9 keys). Truth over flattery, always. Push back when an idea is dangerous, even if Abhya pushes hard.
+---
+
+## WHAT BIZLI IS (Technical)
+
+### Infrastructure (entirely free-tier)
+- **Runtime:** Cloudflare Workers (TypeScript)
+- **Storage:** Cloudflare KV (namespace BIZLI_MEMORY) + Supabase (PostgreSQL)
+- **AI:** Groq (primary), OpenRouter, Cloudflare Worker AI, Gemini (Lab-only)
+- **Search:** Tavily (5 keys) + Serper fallback
+
+### Production
+- **URL:** https://bizli-worker.bizlibix.workers.dev
+- **GitHub:** https://github.com/abhyapatwa-source/bizli-worker
+- **Telegram:** @BizliAI_bot
+- **Current users:** 11 approved, 0 waitlist
+
+### Current version: v11.90.0
+
+---
+
+## ARCHITECTURE
+
+### Bizli's chat brain chain (in order)
+1. **Groq** (primary): 16 keys × 3 tool-capable models = 48 attempts
+   - llama-3.3-70b-versatile (primary)
+   - llama-4-maverick-17b-128e-instruct (fallback)
+   - llama-4-scout-17b-16e-instruct (third)
+2. **OpenRouter** (fallback): meta-llama/llama-3.1-8b-instruct:free
+3. **Cloudflare Worker AI** (last resort): @cf/meta/llama-3.1-8b-instruct
+
+### Lab Agent (separate diagnostic AI)
+- **Gemini** only, 4 keys × 3 models = 12 attempts
+- gemini-2.5-flash → gemini-2.0-flash → gemini-1.5-flash
+- Bizli's chat **never** touches Gemini (architectural separation since v11.87.0)
+
+### Vision (image input)
+- Locked to llama-4-scout-17b-16e-instruct
+- No rotation
+
+### Memory extraction
+- Uses llama-3.1-8b-instant via callGroqJSON
+- Separate path, leave alone
+
+---
+
+## FILE STRUCTURE
+
+```
+worker/
+  index.ts         (~486 lines) — HTTP routing + cron triggers
+  brain.ts         (~800 lines) — AI brain, model rotation, persona
+  tools.ts         (~400 lines) — 10 production tools
+  commands.ts      (~872 lines) — User slash commands
+  admin.ts         (~548 lines) — Admin commands (!approve, !ban, etc.)
+  apis.ts          (~521 lines) — Third-party API wrappers
+  search.ts        (~334 lines) — Web search (Tavily + Serper)
+  auth.ts          (~285 lines) — User registration + PIN auth
+  utils.ts         (~293 lines) — Helpers (key getters, script detection)
+  telegram.ts      (~257 lines) — Telegram API wrappers
+  stats.ts         (~226 lines) — /admin/stats endpoint
+  agents.ts        (~154 lines) — Cron agents
+  memory.ts        (~126 lines) — KV + Supabase memory
+  lab.ts           (~135 lines) — Lab Agent backend
+  quota.ts         (~59 lines)  — Lab quota tracking
+  discord.ts       (~167 lines) — Discord handler
+  facebook.ts      (~60 lines)  — Facebook Messenger
+  group.ts         (~118 lines) — Telegram groups
+  html.ts          (~391 lines) — Dashboard HTML assembler (thin)
+  dashboard/       — 17 split modules for the dashboard UI
+    styles.ts, scripts.ts, gate.ts, topbar.ts, leftnav.ts
+    orb.ts, rightpanel.ts
+    tabs/
+      overview.ts, keys.ts, errors.ts, tools.ts, users.ts, vitals.ts
+      brains.ts                  ← active
+      models.ts                  ← empty (Phase 2 to populate)
+      livefeed.ts                ← empty (Phase 2 to populate)
+      maintenance.ts             ← empty (Phase 2 to populate)
+```
+
+### Files to DELETE eventually
+- `worker/index_BACKUP_v11.80.2.ts` — 7,116-line backup, never imported, safe to remove
+
+---
+
+## SECRETS (Cloudflare Workers)
+
+- 16 Groq keys: GROQ_API_KEY_1 through _16
+- 4 Gemini keys: GEMINI_API_KEY, _2, _3, _4
+- 5 Tavily keys: TAVILY_API_KEY, _2, _3, _4, _5
+- Other API keys: OPENROUTER, GOOGLE, GIPHY, TMDB, GUARDIAN, NEWS, NASA, API_NINJAS, SERPER, HF
+- Platform: TELEGRAM_BOT_TOKEN, FB_PAGE_ACCESS_TOKEN, FB_VERIFY_TOKEN, DISCORD_APP_ID, DISCORD_BOT_TOKEN, DISCORD_PUBLIC_KEY
+- Storage: SUPABASE_URL, SUPABASE_SERVICE_KEY
+- Auth: ADMIN_CHAT_ID, ADMIN_PASSWORD
+- KV namespace: BIZLI_MEMORY
+
+---
+
+## BIZLI'S 10 ACTIVE TOOLS (in BIZLI_TOOLS)
+
+1. **get_weather** — current weather, any location worldwide
+2. **get_current_time** — time in any city/country (timezone-aware)
+3. **search_web** — Tavily primary, Serper fallback
+4. **convert_currency** — all major currencies
+5. **get_movie_info** — TMDB API, all languages
+6. **read_url** — read and summarize any public URL
+7. **save_to_vault** — private diary entries (KV, capped 50)
+8. **send_gif** — Giphy API
+9. **search_youtube** — YouTube Data API v3
+10. **show_map** — Google Maps URL
+
+### NOT in BIZLI_TOOLS (dead code in executeTool, should clean up)
+- translate_text, get_crypto_price, get_recipe, get_joke, get_quote
+- define_word, get_nasa_apod, calculate_math, get_country_info
+- get_iss_location, get_stock_price, shorten_url, get_holidays
+- get_fun_fact, generate_qr, search_products, get_news
+
+(17 dead handlers. Promote them back to BIZLI_TOOLS OR delete them. Decision pending.)
+
+---
+
+## ENGINEERING PRINCIPLES (non-negotiable)
+
+1. **Small edits, one at a time** — beats big-bang attempts that hit 32k output limits
+2. **tsc must pass BEFORE deploy** — always `npx tsc --noEmit`
+3. **Push to GitHub after every successful deploy** — never wait until "end"
+4. **Verify reality before designing on top of it** — read existing code, don't assume
+5. **Diagnose before fix** — find root cause, no guessing
+6. **Don't add features when bugs are unresolved**
+7. **Test in browser, not by asking Claude Code** — saves tokens
+8. **Maintenance mode ON before risky deploys** — protect real users
+9. **Skip when token-constrained** — ship what's working
+10. **Refactor working code is clean, refactor broken code is double-risky**
+
+---
+
+## WORKFLOW
+
+```cmd
+cd C:\Users\bizli\bizli-v9     ← always
+npx tsc --noEmit                ← check before deploy
+npx wrangler deploy             ← CMD only, not PowerShell
+git add . && git commit -m "vX.Y.Z: desc" && git push origin main
+```
+
+To find versioned downloads (Windows appends numbers):
+```cmd
+dir "C:\Users\bizli\Downloads\index*.ts" /OD
+```
+
+---
+
+## PROJECT TIMELINE
+
+- **Started:** June 25, 2026
+- **Today:** June 28, 2026 (Day 4)
+- **Target completion:** July 5-7, 2026 (Day 11-13)
+- **Days remaining:** ~7-9
+
+---
+
+## PHASE 2 PROGRESS
+
+### Deployed
+- ✅ v11.87.0: Gemini separated to Lab-only
+- ✅ v11.88.0: Quota tracking + Brains tab populated
+- ✅ v11.88.1: UX font fixes (39 size bumps)
+- ✅ v11.89.0: Global Health % indicator in topbar
+- ✅ v11.90.0: Groq multi-model rotation (3 models × 16 keys = 48 slots)
+
+### Remaining Phase 2
+- ⏳ Edit 5B: Real Models tab UI (shows live rotation status)
+- ⏳ Edit 6: Brain Chain pipeline visualization (Overview redesign)
+- ⏳ Edit 8: Real Live Feed tab content (event stream)
+- ⏳ Edit 9: Skeleton loaders during data load
+- ⏳ Edit 10: Lab Agent memory in Supabase (importance-scored vault)
+- ⏳ Edit 11: Maintenance tab + OpenRouter cleanup analyzer
+- ⏳ Edit 12: Morphing Orb upgrade (5-layer animated)
+- ⏳ Edit 13: Sound effects + animations polish
+
+---
+
+## PHASE 3 (next, after Phase 2)
+
+- ⏳ Auto-testing infrastructure (Lab Agent sends test prompts to Bizli)
+- ⏳ Tests tab in dashboard (quality trends, multi-language tests)
+- ⏳ Anomaly detection (proactive alerts when quality drops)
+- ⏳ Cross-session memory + pattern recognition
+
+---
+
+## BIZLI'S KNOWN BUGS (real bugs to fix AFTER Lab is done)
+
+User will provide full list when Lab is ready. Already known issues:
+- Feminine Hindi grammar sometimes wrong (sakti vs sakta)
+- Time zone handling for non-Indian countries occasionally wrong
+- !agent command list display issue
+- Other bugs the user has identified but not yet detailed
+
+**Approach:** Use Lab Agent's diagnostic power to find root causes before fixing.
+
+---
+
+## FUTURE (Phase 4, not scheduled yet)
+
+- **WhatsApp via Meta Cloud API sandbox** — free, 5 whitelisted numbers, ~3 hours
+- Voice transcription enhancements
+- Group chat support
+- Additional language testing
+
+---
+
+## KNOWN TECHNICAL DEBT
+
+1. `callGemini()` in brain.ts is dead code (getGeminiKeys("bizli") returns []). Should be removed for clarity.
+2. 17 unreachable tool handlers in executeTool() (translate, crypto, recipe, etc.). Delete or promote.
+3. `autoExtractMemory` doubles Groq calls every 4 messages. Quota risk at scale.
+4. `index_BACKUP_v11.80.2.ts` (7,116 lines) in repo unused. Delete safely.
+5. Cron at 1,000 users sends ~1,000 messages per tick. Rate limit risk.
+6. Web search rate-limited 15/hour/user.
+
+---
+
+## DECISIONS USER HAS MADE (LOCKED IN)
+
+- **Gemini = Lab-only forever** (separated from Bizli's chat)
+- **OpenRouter** = future role: maintenance/cache cleanup analyzer
+- **Worker AI** = last resort for basic chat
+- **Privacy strict** — no user names/messages in dashboard UI
+- **No emojis in dashboard production UI** (Lucide icons only)
+- **WhatsApp** = future Phase 4, not now
+- **Auto-testing** = real Phase 3, ~3-4 days
+- **Memorial significance** — Bizli is named after my deceased pet, project carries emotional weight
+
+---
+
+## USER INTERACTION STYLE
+
+- I prefer **clear, concise English** — no forced Hindi mixing from Claude Code
+- I'll say "ok" or "yes" — interpret as "execute the plan"
+- I push back when something feels wrong — listen, don't override
+- I want **honest pushback** when I'm about to make a mistake
+- I value **real engineering discipline** — verify, plan, execute, test, ship, push
+- I appreciate **direct answers** over hedging
+
+---
+
+## MAINTENANCE STATUS CHECK
+
+⚠️ **ALWAYS check at session start:** Is maintenance mode ON or OFF?
+- If ON: Users locked out, safe deploy zone, take risks
+- If OFF: Real users active, be careful with brain.ts changes
+
+---
+
+## STARTING A NEW SESSION — RUN FIRST
+
+```cmd
+git status
+git log -3 --oneline
+type worker\brain.ts | findstr BIZLI_VERSION
+curl -s "https://bizli-worker.bizlibix.workers.dev/admin/stats?key=23062024" | head -c 200
+```
+
+Verify:
+- Working tree clean
+- Local = origin/main
+- Deployed version matches local
+- Lab Agent endpoint responds
+
+---
+
+## ASK USER BEFORE
+
+- Any change to `brain.ts` (Bizli's chat is at stake)
+- Any KV schema change (data migration risk)
+- Any new external dependency (npm, API)
+- Disabling maintenance mode
+- Adding new platforms (WhatsApp, Instagram, etc.)
+- Multi-language test changes (could affect global users)
+
+## DON'T ASK USER BEFORE
+
+- Running `tsc`
+- Reading files
+- `git status` / `git log`
+- Small UX polish edits (already-approved plans)
+- Following an approved plan step-by-step
+
+---
+
+## IDEAS BACKLOG (Abhya's notes — discuss at the right phase)
+
+[Empty — add ideas here as user mentions them]
+
+---
+
+End of CLAUDE.md
