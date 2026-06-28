@@ -4,14 +4,14 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v11.90.0";
+export const BIZLI_VERSION = "v11.90.1";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
 const GROQ_TEXT_MODELS = [
-  { id: "llama-3.3-70b-versatile",                       slot: "70b" },
-  { id: "meta-llama/llama-4-maverick-17b-128e-instruct", slot: "mav" },
-  { id: "meta-llama/llama-4-scout-17b-16e-instruct",     slot: "sct" },
+  { id: "llama-3.3-70b-versatile",                      slot: "70b" },
+  { id: "llama-3.1-8b-instant",                         slot: "8b"  },
+  { id: "meta-llama/llama-4-scout-17b-16e-instruct",    slot: "sct" },
 ];
 
 function msUntilMidnightUTC(): number {
@@ -502,10 +502,10 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
                 }
               }
             } catch {}
-            // Tool payload rejected — same schema fails every key. Cool this key and fall to OpenRouter.
+            // Tool call failed on this key — cool it and try the next key before falling to OpenRouter.
             status.cooldowns[i] = Date.now() + RPM_COOLDOWN_MS;
             statusDirty = true;
-            break outerLoop;
+            continue outerLoop;
           }
           continue;
         }

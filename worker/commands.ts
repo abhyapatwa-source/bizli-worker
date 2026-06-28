@@ -259,7 +259,7 @@ export async function detectIntent(env: Env, text: string, chatId: string, userI
         await sendTelegram(env, chatId, `${header}${news}`);
         return true;
       }
-    } else if (confidence >= 50) {
+    } else if (confidence >= 65) {
       const encoded = encodeURIComponent(topic).slice(0, 40);
       await sendTelegram(env, chatId,
         "want me to get the latest news for you? 📰",
@@ -275,7 +275,7 @@ export async function detectIntent(env: Env, text: string, chatId: string, userI
   const movieRx = /(?:movie|film)(?: info| about| on| called)? (.+)|(?:tell me about the movie|search movie|recent movie|latest movie from) (.+)/i;
   const movieM = text.match(movieRx);
   if (movieM || lower.includes("marvel") || lower.includes("bollywood movie") || lower.includes("hollywood movie")) {
-    const q = (movieM[1] || movieM[2]).trim();
+    const q = (movieM?.[1] || movieM?.[2] || text).trim();
     const m = await getMovie(env, q);
     if (m) { await sendTelegram(env, chatId, m); return true; }
   }
