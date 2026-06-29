@@ -3,7 +3,7 @@ import { db } from './db';
 import { getGroqKeys, getGeminiKeys } from './utils';
 import { sendTelegram, editTelegramMessage, broadcastToTelegram, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAdminSession, lookupUser, setAuthStateHelper, getUserMemories } from './memory';
-import { getGroqStatus, BIZLI_VERSION } from './brain';
+import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, probeGroqModels } from './brain';
 import { BIZLI_TOOLS } from './tools';
 import { runAgents } from './agents';
 
@@ -369,10 +369,42 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
   } else if (agentCmd === "uptime") {
     const lastReport = await env.BIZLI_MEMORY.get("last_daily_report");
     await out(`🕐 Now: ${new Date().toUTCString()}\n📋 Last daily report: ${lastReport ? new Date(parseInt(lastReport)).toUTCString() : "never"}\n🤖 Version: ${BIZLI_VERSION}`, false);
+  } else if (agentCmd === "models") {
+    const { text, vision } = await getActiveGroqModels(env);
+    const lastCheck = await env.BIZLI_MEMORY.get("last_model_check");
+    const checkedAt = lastCheck ? new Date(parseInt(lastCheck)).toUTCString() : "never";
+    const lines = [
+      `🧠 Active Groq Models — ${BIZLI_VERSION}`,
+      ``,
+      `Text (${text.length}/4):`,
+      ...text.map((m, i) => `  ${i + 1}. ${m.id}`),
+      ``,
+      `Vision: ${vision}`,
+      ``,
+      `Last probed: ${checkedAt}`,
+      `Run "!agent refresh models" to probe now.`,
+    ];
+    await out(lines.join("\n"), false);
+  } else if (agentCmd === "refresh models") {
+    await out("🔍 Probing Groq model pool — this takes ~15s...", false);
+    const { text, vision, changed } = await probeGroqModels(env);
+    const lines = [
+      `✅ Probe complete`,
+      ``,
+      `Live text models (${text.length}/4):`,
+      ...text.map((id, i) => `  ${i + 1}. ${id}`),
+      ``,
+      `Live vision: ${vision}`,
+      ``,
+      changed ? `⚡ Model list updated in KV.` : `No change from previous list.`,
+    ];
+    await out(lines.join("\n"), false);
   } else {
     await out(
       "🏥 Bizli Agent Commands:\n\n" +
       "!agent status — full system overview\n" +
+      "!agent models — show active model list\n" +
+      "!agent refresh models — probe & auto-update models\n" +
       "!agent users — recent user activity\n" +
       "!agent kv — KV storage breakdown\n" +
       "!agent errors — recent error log\n" +

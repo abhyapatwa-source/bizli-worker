@@ -1,18 +1,95 @@
 import type { Env } from './types';
-import { getGroqKeys, getGeminiKeys } from './utils';
+import { getGroqKeys, getGeminiKeys, fetchTimeout } from './utils';
 import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v11.90.1";
+export const BIZLI_VERSION = "v11.92.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
+// Default fallback when KV has no live model list yet
 const GROQ_TEXT_MODELS = [
-  { id: "llama-3.3-70b-versatile",                      slot: "70b" },
-  { id: "llama-3.1-8b-instant",                         slot: "8b"  },
-  { id: "meta-llama/llama-4-scout-17b-16e-instruct",    slot: "sct" },
+  { id: "openai/gpt-oss-120b",  slot: "120b" },
+  { id: "openai/gpt-oss-20b",   slot: "20b"  },
 ];
+
+const DEFAULT_VISION_MODEL = "llama-3.2-90b-vision-preview";
+
+// Ordered by preference — probeGroqModels() tests these and picks up to 4 live ones
+const GROQ_CANDIDATE_POOL = [
+  { id: "openai/gpt-oss-120b" },
+  { id: "openai/gpt-oss-20b" },
+  { id: "qwen/qwen3.6-27b" },
+  { id: "qwen-qwq-32b" },
+  { id: "llama-3.3-70b-versatile" },
+  { id: "meta-llama/llama-4-maverick-17b-128e-instruct" },
+  { id: "meta-llama/llama-4-scout-17b-16e-instruct" },
+  { id: "llama-3.1-8b-instant" },
+];
+
+const GROQ_VISION_CANDIDATES = [
+  "llama-3.2-90b-vision-preview",
+  "llama-3.2-11b-vision-preview",
+];
+
+function modelSlot(id: string): string {
+  return id.replace(/[^a-z0-9]/gi, "").slice(-8).toLowerCase();
+}
+
+export async function getActiveGroqModels(env: Env): Promise<{ text: { id: string; slot: string }[]; vision: string }> {
+  try {
+    const raw = await env.BIZLI_MEMORY.get("groq_live_models");
+    if (raw) {
+      const parsed = JSON.parse(raw) as { text: string[]; vision: string };
+      if (parsed?.text?.length) {
+        return {
+          text: parsed.text.map((id: string) => ({ id, slot: modelSlot(id) })),
+          vision: parsed.vision || DEFAULT_VISION_MODEL,
+        };
+      }
+    }
+  } catch {}
+  return { text: GROQ_TEXT_MODELS, vision: DEFAULT_VISION_MODEL };
+}
+
+export async function probeGroqModels(env: Env): Promise<{ text: string[]; vision: string; changed: boolean }> {
+  const keys = getGroqKeys(env);
+  if (!keys.length) return { text: GROQ_TEXT_MODELS.map(m => m.id), vision: DEFAULT_VISION_MODEL, changed: false };
+  const probeKey = keys[0];
+  const liveText: string[] = [];
+  let liveVision = "";
+
+  for (const { id } of GROQ_CANDIDATE_POOL) {
+    if (liveText.length >= 4) break;
+    try {
+      const res = await fetchTimeout("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${probeKey}` },
+        body: JSON.stringify({ model: id, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0 }),
+      }, 6000);
+      if (res && (res.ok || res.status === 429)) liveText.push(id);
+    } catch {}
+  }
+
+  for (const id of GROQ_VISION_CANDIDATES) {
+    try {
+      const res = await fetchTimeout("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${probeKey}` },
+        body: JSON.stringify({ model: id, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0 }),
+      }, 6000);
+      if (res && (res.ok || res.status === 429)) { liveVision = id; break; }
+    } catch {}
+  }
+
+  if (!liveVision) liveVision = DEFAULT_VISION_MODEL;
+  const prev = await env.BIZLI_MEMORY.get("groq_live_models").catch(() => null);
+  const next = JSON.stringify({ text: liveText, vision: liveVision });
+  const changed = prev !== next && liveText.length > 0;
+  if (liveText.length) await env.BIZLI_MEMORY.put("groq_live_models", next, { expirationTtl: 172800 }).catch(() => {});
+  return { text: liveText, vision: liveVision, changed };
+}
 
 function msUntilMidnightUTC(): number {
   const now = new Date();
@@ -78,7 +155,7 @@ GEN Z EMOTION STYLE: Match emotional moments with natural Gen Z warmth — not p
 FINISH EVERY SENTENCE — never cut off mid-thought.
 Recommendations = "• Name | 💰Price | ⭐Rating | 🔗Link". News = 2-3 bullets max + 1 source link. Locations = maps link. Zero filler ("hope this helps", "let me know", "is there anything else").
 
-TOOLS: You have 10 tools for REAL-TIME data and external services only. For knowledge questions (jokes, math, definitions, translation, recipes, country facts, holidays, crypto/stock prices, etc.) — answer from your own training knowledge. You're a llama-3.3-70b model, you know these things. Don't reach for a tool when you can just answer. DO use tools for: live weather, current time anywhere, today's news/events, current office-holders (CM/PM/President — positions change and your training is stale for them), live currency rates, specific movie/show info by title, reading a URL the user shares, YouTube video searches, map/location requests. For get_movie_info: only call when the user names a real title. When a tool returns results, trust and report them — results beat training memory. Do NOT end replies with questions like "is there anything else?", "do you want me to...?", "kya aapko madad chahiye?" — it's annoying, especially in casual/emotional chat. When someone shares a feeling, respond warmly like a friend who CARES — just be present and warm, at most ONE gentle question if it fits.
+TOOLS: You have 10 tools for REAL-TIME data and external services only. For knowledge questions (jokes, math, definitions, translation, recipes, country facts, holidays, crypto/stock prices, etc.) — answer from your own training knowledge. You're a powerful 120B model, you know these things. Don't reach for a tool when you can just answer. DO use tools for: live weather, current time anywhere, today's news/events, current office-holders (CM/PM/President — positions change and your training is stale for them), live currency rates, specific movie/show info by title, reading a URL the user shares, YouTube video searches, map/location requests. For get_movie_info: only call when the user names a real title. When a tool returns results, trust and report them — results beat training memory. Do NOT end replies with questions like "is there anything else?", "do you want me to...?", "kya aapko madad chahiye?" — it's annoying, especially in casual/emotional chat. When someone shares a feeling, respond warmly like a friend who CARES — just be present and warm, at most ONE gentle question if it fits.
 
 VISION: When a user sends a photo, you can actually see it — describe/discuss it naturally and specifically (like a friend looking at their photo), don't say you can't see images. Keep it conversational, 1-3 lines unless they ask for detail. FOLLOW-UPS about a photo (e.g. "english", "in detail", "are you sure?"): the photo itself isn't re-attached, but YOUR OWN PREVIOUS REPLY in this conversation already describes it — use that description to answer (translate it, expand on it, etc.). NEVER say "I can't see images" or "I'm text-based" when you literally just described one — that's contradictory and confusing.
 
@@ -317,7 +394,7 @@ export async function callGemini(
     generationConfig: { temperature: 0.75, maxOutputTokens: 512 },
   };
   if (opts.search) body.tools = [{ google_search: {} }];
-  const model = "gemini-2.5-flash";
+  const model = "gemini-3.5-flash";
   for (const key of keys) {
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
@@ -378,7 +455,7 @@ export async function callGroqJSON(env: Env, prompt: string): Promise<any> {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[i]}` },
-        body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "user", content: prompt }], temperature: 0.3, max_tokens: 300 }),
+        body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: [{ role: "user", content: prompt }], temperature: 0.3, max_tokens: 300 }),
       });
       if (res.status === 429) {
         const retryAfterSec = res.headers.get("retry-after");
@@ -433,12 +510,14 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
   );
   let gifSent = false;
 
+  const { text: liveTextModels, vision: liveVisionModel } = await getActiveGroqModels(env);
+
   outerLoop: for (const i of order) {
     if ((status.cooldowns[i] || 0) - Date.now() > 60_000) continue;
 
     const modelsToTry = hasVisionContent
-      ? [{ id: "meta-llama/llama-4-scout-17b-16e-instruct", slot: "vis" }]
-      : GROQ_TEXT_MODELS;
+      ? [{ id: liveVisionModel, slot: "vis" }]
+      : liveTextModels;
 
     for (const { id: usedModel, slot } of modelsToTry) {
       if (!hasVisionContent && (status.mc[`${i}_${slot}`] || 0) > Date.now()) continue;

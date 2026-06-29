@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { db } from './db';
 import { getGroqKeys, getUserLocalHour, MORNING_MSGS, NIGHT_MSGS } from './utils';
 import { sendTelegram } from './telegram';
-import { getGroqStatus } from './brain';
+import { getGroqStatus, probeGroqModels } from './brain';
 
 function pickProactiveMessage(name: string, localHour: number): string {
   const first = name.split(" ")[0];
@@ -134,6 +134,17 @@ export async function runAgents(env: Env): Promise<void> {
     const coolingCount = keys.filter((_, i) => (status.cooldowns[i] || 0) > now).length;
     if (coolingCount >= Math.ceil(keys.length * 0.7)) {
       await sendTelegram(env, env.ADMIN_CHAT_ID, `⚠️ Bizli Health Alert: ${coolingCount}/${keys.length} Groq keys on cooldown!`);
+    }
+
+    const lastModelCheck = await env.BIZLI_MEMORY.get("last_model_check");
+    if (!lastModelCheck || now - parseInt(lastModelCheck) > 43_200_000) {
+      await env.BIZLI_MEMORY.put("last_model_check", String(now), { expirationTtl: 90000 });
+      const { text, vision, changed } = await probeGroqModels(env);
+      if (changed && text.length) {
+        await sendTelegram(env, env.ADMIN_CHAT_ID,
+          `🔄 Groq model list auto-updated\n\nText (${text.length}/4):\n${text.map((m, i) => `  ${i + 1}. ${m}`).join("\n")}\nVision: ${vision}`
+        ).catch(() => {});
+      }
     }
 
     const lastReport = await env.BIZLI_MEMORY.get("last_daily_report");

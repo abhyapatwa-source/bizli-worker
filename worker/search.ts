@@ -29,7 +29,7 @@ export async function extractSearchQuery(env: Env, text: string): Promise<string
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[0]}` },
       body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-20b",
         messages: [
           { role: "system", content: "You convert a user's question (in ANY language) into a short web-search query of 2-6 keywords. Translate non-English to English keywords. Output ONLY the search query, nothing else, no quotes." },
           { role: "user", content: text.slice(0, 300) },
@@ -56,33 +56,45 @@ export function extractOfficeQuery(query: string): { office: string; region: str
   return null;
 }
 
-export async function needsLiveSearch(env: Env, text: string): Promise<boolean> {
+export function needsLiveSearch(text: string): boolean {
   const t = text.toLowerCase().trim();
   if (t.length < 4) return false;
-  if (/\b(weather|temperature|time in|what time|exchange rate|bitcoin|crypto price)\b/i.test(t)) return false;
-  if (/\b(ladka|ladki|boy or girl|male or female|tu kaun|tum kaun|aap kaun|who are you|are you a|tum ho kya|kaisi hai tu|tum ladki|tu ladki|tu ladka|kon ho tum|kaun ho tum)\b/i.test(t)) return false;
+
+  // Tool-handled — never pre-search
+  if (/\b(weather|temperature|kitni garmi|kitni sardi|baarish|barish)\b/i.test(t)) return false;
+  if (/\b(time in|what time|current time|time zone)\b/i.test(t)) return false;
+  if (/\b(exchange rate|convert currency|usd|eur|gbp|inr to|rupee to|dollar to)\b/i.test(t)) return false;
+  if (/\b(bitcoin price|crypto price|ethereum price|btc price|eth price)\b/i.test(t)) return false;
+
+  // Casual / identity / creative — never need live data
+  if (/^(hi+|hey+|hello+|sup|yo|hola|namaste|namaskar|salaam|salam|ola|ciao|hii+|heyy+|heya)\b/i.test(t)) return false;
+  if (/\b(kya hal|kaise ho|kaisi ho|kaise hain|kaisa hai|how are you|how r u|u ok|how's it going)\b/i.test(t)) return false;
+  if (/\b(good morning|good night|goodnight|good evening|good afternoon|subah|shaam|raat ko)\b/i.test(t)) return false;
+  if (/\b(who are you|what are you|are you (a |an )?(bot|ai|robot|human|girl|boy|real)|tum kaun|tu kaun|tum kya ho|kya tum (ho|hain)|are you real)\b/i.test(t)) return false;
+  if (/\b(tu ladki|tu ladka|tum ladki|tum ladka|ladka hai|ladki hai|gender|male or female|boy or girl)\b/i.test(t)) return false;
+  if (/\b(tell me (a |about a )?(joke|story|poem|shayari|riddle)|make me (laugh|smile)|suna (joke|kahani|shayari)|ek joke|ek poem)\b/i.test(t)) return false;
+  if (/\b(write (me|a|an|something)|generate (a|an)|create (a|an)|make (a|an)|compose|draft)\b/i.test(t)) return false;
+  if (/\b(should i|kya mujhe|kya main|advise me|what do you think about|what would you do|your opinion|tumhara opinion|meri help karo)\b/i.test(t)) return false;
+  if (/\b(recipe|how to (cook|make|prepare|bake)|ingredients for|kaise banaye|kaise banta hai)\b/i.test(t)) return false;
+  if (/\b(relationship|breakup|girlfriend|boyfriend|pyar|mohabbat|marriage|shaadi|love advice)\b/i.test(t)) return false;
+  if (/^[\d\s+\-*/^().%=]+$/.test(t)) return false; // pure math
+  if (/\b(calculate|solve|what is \d|kitna hoga|total of|sum of|percentage of)\b/i.test(t)) return false;
+  if (/\b(explain|define|what does .* mean|meaning of|matlab kya|samjhao|bata do|difference between)\b/i.test(t)) return false;
+
+  // Office holders — always search
   if (extractOfficeQuery(text)) return true;
-  if (!env.AI) return false;
-  try {
-    const res = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-      messages: [
-        {
-          role: "system",
-          content: `You decide if a user's message needs a live web search to answer accurately.
-Answer ONLY with: yes or no
 
-Search YES for: current news, recent events, today's match scores, election results, live prices or rates, latest updates on a topic, who currently holds a political office.
+  // Hard YES — clearly needs current/live data
+  if (/\b(latest news|breaking news|aaj ki khabar|today's news|abhi kya ho raha|live update)\b/i.test(t)) return true;
+  if (/\b(who won|kaun jeeta|winner|election result|match result|live score|ipl score|world cup)\b/i.test(t)) return true;
+  if (/\b(stock price|share price|nifty|sensex|nasdaq|dow jones|market today)\b/i.test(t)) return true;
+  if (/\b(new (movie|film|show|series|season|album|song) (out|released|launched|dropped))\b/i.test(t)) return true;
+  if (/\b(release date|launch date|kab aayega|kab release|kab aata hai).*(movie|film|show|game|phone|iphone|samsung)\b/i.test(t)) return true;
+  if (/\b(current|latest|abhi|aajkal|right now|2025|2026).*(price|rate|value|news|update|status|result)\b/i.test(t)) return true;
+  if (/\b(price|rate|value|news|update|status|result).*(current|latest|abhi|today|aaj|2025|2026)\b/i.test(t)) return true;
 
-Search NO for: casual chat, greetings, feelings, jokes, poems, stories, questions about Bizli herself, math, cooking, general knowledge, historical facts, relationship advice, anything answerable from general knowledge.`,
-        },
-        { role: "user", content: text },
-      ],
-      temperature: 0,
-      max_tokens: 5,
-    });
-    const ans = (res?.response || "").toLowerCase().trim();
-    return ans.startsWith("y") || ans.includes("yes");
-  } catch { return false; }
+  // Default: no search — trust tools + Groq's knowledge
+  return false;
 }
 
 export async function getGoogleNewsRSS(query: string): Promise<string> {
