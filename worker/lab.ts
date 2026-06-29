@@ -62,28 +62,21 @@ async function fetchLabMemories(env: Env): Promise<string> {
   } catch { return ""; }
 }
 
-async function saveLabMemory(env: Env, role: string, content: string, importance: number): Promise<string | null> {
+async function saveLabMemory(env: Env, role: string, content: string, importance: number): Promise<void> {
   try {
     const result = await db(env, "lab_memory", "POST", {
       role,
       content: content.slice(0, 800),
       importance: Math.max(0, Math.min(1, importance)),
     });
-    // PostgREST returns the inserted row(s) on success, or an error object on failure
     if (Array.isArray(result) && result[0]?.id) {
-      // Prune if over 200: fetch bottom-50 IDs and delete them
       const overflow = await db(env, "lab_memory?select=id&order=importance.asc&limit=50&offset=200");
       if (Array.isArray(overflow) && overflow.length) {
         const ids = overflow.map((r: any) => r.id).join(",");
         await db(env, `lab_memory?id=in.(${ids})`, "DELETE");
       }
-      return null;
     }
-    // Insert failed — return error for surfacing
-    return JSON.stringify(result);
-  } catch (e: any) {
-    return e?.message || String(e);
-  }
+  } catch {}
 }
 
 export async function callLabAgent(
@@ -188,18 +181,15 @@ export async function handleLabAgent(request: Request, env: Env): Promise<Respon
   const { reply, importance } = await callLabAgent(env, messages, dashboardData);
 
   // Save last user message + assistant reply to the Supabase vault
-  let memErr: string | null = null;
   if (importance > 0.15 && !reply.startsWith("Lab Agent error:")) {
     const lastUser = [...messages].reverse().find(m => m.role === "user");
     if (lastUser) {
-      const [e1, e2] = await Promise.all([
+      await Promise.all([
         saveLabMemory(env, "user", lastUser.content, importance),
         saveLabMemory(env, "assistant", reply, importance),
       ]);
-      memErr = e1 || e2 || null;
     }
   }
 
-  // _memErr included temporarily for diagnostics — remove once memory is verified working
-  return new Response(JSON.stringify({ reply, _imp: importance, _memErr: memErr }), { status: 200, headers: LAB_CORS });
+  return new Response(JSON.stringify({ reply }), { status: 200, headers: LAB_CORS });
 }
