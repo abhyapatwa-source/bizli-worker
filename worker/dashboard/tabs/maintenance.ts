@@ -8,12 +8,12 @@ export const MAINTENANCE_HTML = `<div class="panel" id="maintenance-section">
   <div id="maint-users" style="font-size:.7rem;color:var(--muted);margin-bottom:16px;padding:0 2px">&mdash; approved users currently active</div>
 
   <div style="font-size:.72rem;color:var(--muted);letter-spacing:.12em;margin-bottom:8px">TOGGLE VIA TELEGRAM</div>
-  <div class="maint-cmd" onclick="copyCmd('!maint on')">
-    <code>!maint on</code>
+  <div class="maint-cmd" onclick="copyCmd('!maintenance on')">
+    <code>!maintenance on</code>
     <span style="font-size:.62rem;color:var(--muted)">Lock users out &rarr;</span>
   </div>
-  <div class="maint-cmd" onclick="copyCmd('!maint off')">
-    <code>!maint off</code>
+  <div class="maint-cmd" onclick="copyCmd('!maintenance off')">
+    <code>!maintenance off</code>
     <span style="font-size:.62rem;color:var(--muted)">Bring users back &rarr;</span>
   </div>
 

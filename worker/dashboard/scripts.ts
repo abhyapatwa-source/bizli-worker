@@ -50,7 +50,7 @@ function updateOrb(d){
   var osub=document.getElementById("orb-sub");
   var ost=document.getElementById("orb-status");
   var errs=d.recentErrors?d.recentErrors.length:0;
-  var lb=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain:"groq";
+  var lb=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain.toLowerCase():"groq";
   var rk=d.groq?d.groq.filter(function(k){return k.status==="ready";}).length:0;
   orb.className="";
   if(errs>=5){
@@ -70,7 +70,7 @@ function updateBrain(d){
   var grid=document.getElementById("kgrid");
   if(!d.groq||!d.groq.length)return;
   var lastKey=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].key:null;
-  var lastBrain=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain:"groq";
+  var lastBrain=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain.toLowerCase():"groq";
   var h="";
   d.groq.forEach(function(k,i){
     var lu=(lastBrain==="groq"&&i===lastKey)?" lastused":"";
@@ -90,7 +90,7 @@ function updateDrive(d){
   var list=document.getElementById("drive-list");
   var h="";
   d.lastBrains.forEach(function(b,i){
-    var brain=b.brain||"groq";
+    var brain=(b.brain||"groq").toLowerCase();
     var kl=b.key!=null?" · key "+b.key:"";
     var sig=JSON.stringify(b);
     var isnew=i===0&&(!knownDrive.length||knownDrive[0]!==sig);
@@ -168,7 +168,7 @@ function updateBrains(d){
   var groq=d.groq||[];
   var ready=groq.filter(function(k){return k.status==="ready";}).length;
   var total=groq.length;
-  var lastBrain=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain:"";
+  var lastBrain=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain.toLowerCase():"";
   var gdot=document.getElementById("b-groq-dot");
   var gstat=document.getElementById("b-groq-status");
   if(gdot&&gstat){
@@ -179,7 +179,7 @@ function updateBrains(d){
   var gkeys=document.getElementById("b-groq-keys");
   if(gkeys)gkeys.textContent=ready+"/"+total+" ready";
   var glast=document.getElementById("b-groq-last");
-  if(glast){var gl=d.lastBrains&&d.lastBrains.find(function(b){return b.brain==="groq";});glast.textContent=gl?gl.timeAgo:"never";}
+  if(glast){var gl=d.lastBrains&&d.lastBrains.find(function(b){return b.brain.toLowerCase()==="groq";});glast.textContent=gl?gl.timeAgo:"never";}
   var orActive=lastBrain==="openrouter";
   var ordot=document.getElementById("b-or-dot");
   var orstat=document.getElementById("b-or-status");
@@ -187,9 +187,9 @@ function updateBrains(d){
   var orkey=document.getElementById("b-or-key");
   if(orkey)orkey.textContent=(d.openrouter&&d.openrouter.configured)?"Configured":"Not configured";
   var orlast=document.getElementById("b-or-last");
-  if(orlast){var ol=d.lastBrains&&d.lastBrains.find(function(b){return b.brain==="openrouter";});orlast.textContent=ol?ol.timeAgo:"never";}
+  if(orlast){var ol=d.lastBrains&&d.lastBrains.find(function(b){return b.brain.toLowerCase()==="openrouter";});orlast.textContent=ol?ol.timeAgo:"never";}
   var cflast=document.getElementById("b-cf-last");
-  if(cflast){var cl=d.lastBrains&&d.lastBrains.find(function(b){return b.brain==="CF AI";});cflast.textContent=cl?cl.timeAgo:"never";}
+  if(cflast){var cl=d.lastBrains&&d.lastBrains.find(function(b){return b.brain.toLowerCase()==="cf ai";});cflast.textContent=cl?cl.timeAgo:"never";}
   var gemkeys=document.getElementById("b-gem-keys");
   if(gemkeys)gemkeys.textContent=(d.gemini?d.gemini.keysConfigured:0)+" configured";
   if(lastQ)updateBrainsQuota(lastQ);
@@ -266,7 +266,7 @@ function updateLiveFeed(d){
   if(lb&&d.lastBrains&&d.lastBrains.length){
     var h="";
     d.lastBrains.forEach(function(b){
-      var brain=b.brain||"groq";var kl=b.key!=null?" &middot; key "+b.key:"";
+      var brain=(b.brain||"groq").toLowerCase();var kl=b.key!=null?" &middot; key "+b.key:"";
       h+="<div class='ditem'><span class='dbrain "+brain+"'>"+brain.toUpperCase()+"</span><span style='color:var(--muted);font-size:.58rem'>"+kl+"</span><span class='dtime'>"+b.timeAgo+"</span></div>";
     });
     lb.innerHTML=h;
