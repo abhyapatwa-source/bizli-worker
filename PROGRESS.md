@@ -18,11 +18,11 @@ type worker\brain.ts | findstr BIZLI_VERSION
 
 | Field | Value |
 |---|---|
-| **Deployed version** | v11.95.0 |
+| **Deployed version** | v12.1.0 |
 | **Maintenance mode** | ON (users locked out — turn off before giving access) |
-| **Git** | 5 commits ahead of origin/main — push with `! git push origin main` |
+| **Git** | Ahead of origin/main — push with `! git push origin main` |
 | **Last session** | 2026-06-30 |
-| **Phase** | Phase 2 (Lab dashboard) |
+| **Phase** | Phase 3 (Auto-testing) — DEPLOYED; needs Supabase SQL |
 
 ---
 
@@ -45,6 +45,12 @@ type worker\brain.ts | findstr BIZLI_VERSION
 | v11.94.0 | Dashboard: Models tab, Live Feed tab, Maintenance tab; stats.ts slot fix |
 | v11.94.1 | Fix brain name case bug (orb amber forever); fix maintenance command names |
 | v11.95.0 | Brain pipeline visualization: WHO'S DRIVING → BRAIN PIPELINE with live active-node highlight |
+| v11.96.0 | Skeleton loaders: shimmer placeholders in kgrid, drive-list, user-list, tools-wrap during first data fetch |
+| v11.97.0 | Lab Agent memory vault: importance-scored Supabase persistence, auto-prune at 200 rows, context injection |
+| v11.98.0 | Fix decommissioned vision model (90b→11b default+candidates); Lab memory error surfacing for diagnostics |
+| v11.99.0 | Remove lab memory debug fields — memory confirmed working (needed Supabase GRANT for service_role) |
+| v12.0.0 | Scalable storage: fix recent_errors corruption (raw put→appendError); lab_memory age pruning in daily cron |
+| v12.1.0 | **Phase 3: Auto-testing infrastructure** — tests.ts (5-test suite, Gemini scorer, 6h cron gate), Tests tab in dashboard (pass rate gauge, result cards, skeleton loaders), quality alert at <60% pass rate |
 
 ---
 
@@ -90,6 +96,7 @@ Telegram admin commands:
 | **Models** | ✅ live | models-section | Live Groq text + vision + Gemini Lab model lists |
 | **Live Feed** | ✅ live | livefeed-section | Brain activity stream + error log |
 | **Maintenance** | ✅ live | maintenance-section | Status + click-to-copy Telegram commands |
+| **Tests** | ✅ live | tests-section | 7-day pass rate gauge, per-test result cards — needs `test_results` Supabase table |
 
 ---
 
@@ -98,12 +105,12 @@ Telegram admin commands:
 | Edit | Description | Priority |
 |---|---|---|
 | Edit 6 | Brain Chain pipeline visualization (Overview redesign) | HIGH |
-| Edit 9 | Skeleton loaders during data load | MEDIUM |
-| Edit 10 | Lab Agent memory in Supabase (importance-scored vault) | HIGH |
+| ~~Edit 9~~ | ~~Skeleton loaders during data load~~ | ~~MEDIUM~~ DONE v11.96.0 |
+| ~~Edit 10~~ | ~~Lab Agent memory in Supabase~~ | ~~HIGH~~ DONE v11.97.0 — **needs SQL table** |
 | Edit 12 | Morphing Orb upgrade (5-layer animated) | LOW |
 | Edit 13 | Sound effects + animations polish | LOW |
 
-**Done this session:** 5B (Models tab), 8 (Live Feed), 11 (Maintenance tab), 6 (Brain pipeline)
+**Done this session:** 5B (Models tab), 8 (Live Feed), 11 (Maintenance tab), 6 (Brain pipeline), 9 (Skeleton loaders), 10 (Lab memory vault)
 
 ---
 
@@ -170,4 +177,4 @@ git commit -m "vX.Y.Z: description"
 
 ---
 
-Last updated: 2026-06-30 (v11.94.1 session)
+Last updated: 2026-06-30 (v12.1.0 session)

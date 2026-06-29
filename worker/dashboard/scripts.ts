@@ -293,10 +293,34 @@ function copyCmd(cmd){
   var t=document.getElementById("maint-copy-toast");
   if(t){t.style.display="block";setTimeout(function(){t.style.display="none";},1800);}
 }
+function updateTests(d){
+  var t=d.tests;if(!t)return;
+  var pr=document.getElementById("t-passrate");
+  if(pr)pr.textContent=t.passRate7d+"%";
+  var pb=document.getElementById("t-passbar");
+  if(pb){pb.style.width=t.passRate7d+"%";pb.className="tpass-bar "+(t.passRate7d>=80?"tpass-green":t.passRate7d>=60?"tpass-amber":"tpass-red");}
+  var badge=document.getElementById("t-grade");
+  if(badge){badge.textContent=t.passRate7d>=80?"HEALTHY":t.passRate7d>=60?"DEGRADED":"FAILING";badge.className="bpill "+(t.passRate7d>=80?"bprimary":t.passRate7d>=60?"bfallback":"blast");}
+  var lr=document.getElementById("t-lastrun");
+  if(lr&&t.lastRunAt){var diff=Date.now()-t.lastRunAt;var mins=Math.floor(diff/60000);lr.textContent="last run: "+(mins<60?mins+"m ago":Math.floor(mins/60)+"h "+Math.floor(mins%60)+"m ago");}
+  var res=document.getElementById("t-results");
+  if(!res||!t.recentResults||!t.recentResults.length)return;
+  var h="";
+  t.recentResults.forEach(function(r){
+    var dt=r.created_at?r.created_at.slice(0,10):"";
+    h+="<div class='tresult "+(r.passed?"tresult-pass":"tresult-fail")+"'>";
+    h+="<span class='tname'>"+esc(r.test_name.replace(/_/g," "))+"</span>";
+    h+="<span class='tlang'>"+esc(r.language)+"</span>";
+    h+="<span class='tscore'>"+(r.score!=null?r.score:"—")+"</span>";
+    h+="<span class='tpass-chip "+(r.passed?"tpass-y":"tpass-n")+"'>"+(r.passed?"PASS":"FAIL")+"</span>";
+    h+="<span class='ttime'>"+esc(dt)+"</span></div>";
+  });
+  res.innerHTML=h;
+}
 function updateAll(d){
   lastD=d;
   updateHealth(d);updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
-  updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);updateModels(d);updateMaintenance(d);updateLiveFeed(d);updatePipeline(d);
+  updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);updateModels(d);updateMaintenance(d);updateLiveFeed(d);updatePipeline(d);updateTests(d);
   setN("s-users",d.users?d.users.total:0);
   setN("s-appr",d.users?d.users.approved:0);
   setN("s-msgs",d.messages?d.messages.total:0);

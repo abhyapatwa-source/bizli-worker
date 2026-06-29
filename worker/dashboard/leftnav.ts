@@ -15,6 +15,7 @@ export const LEFTNAV_HTML = `<nav id="leftnav">
     <div class="lnav-item" data-tab="models" onclick="switchTab('models')"><i data-lucide="cpu"></i><span>Models</span></div>
     <div class="lnav-item" data-tab="livefeed" onclick="switchTab('livefeed')"><i data-lucide="zap"></i><span>Live Feed</span></div>
     <div class="lnav-item" data-tab="maintenance" onclick="switchTab('maintenance')"><i data-lucide="settings"></i><span>Maintenance</span></div>
+    <div class="lnav-item" data-tab="tests" onclick="switchTab('tests')"><i data-lucide="check-circle"></i><span>Tests</span></div>
   </div>
   <div id="lnav-foot">
     <span class="live-dot"></span>

@@ -3,6 +3,7 @@ import { db } from './db';
 import { getGroqKeys, getUserLocalHour, MORNING_MSGS, NIGHT_MSGS } from './utils';
 import { sendTelegram } from './telegram';
 import { getGroqStatus, probeGroqModels, probeGeminiModels } from './brain';
+import { runBizliTests } from './tests';
 
 function pickProactiveMessage(name: string, localHour: number): string {
   const first = name.split(" ")[0];
@@ -162,6 +163,14 @@ export async function runAgents(env: Env): Promise<void> {
           `🔄 Model list auto-updated\n\n${alerts.join("\n\n")}`
         ).catch(() => {});
       }
+    }
+
+    // Run quality tests every 6h — alerts if pass rate drops below 60%
+    const { run, passed } = await runBizliTests(env);
+    if (run > 0 && passed / run < 0.6) {
+      await sendTelegram(env, env.ADMIN_CHAT_ID,
+        `⚠️ Bizli Quality Alert: ${passed}/${run} tests passed (${Math.round(passed/run*100)}%) — check dashboard Tests tab`
+      ).catch(() => {});
     }
 
     const lastReport = await env.BIZLI_MEMORY.get("last_daily_report");

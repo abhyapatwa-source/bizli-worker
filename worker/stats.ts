@@ -5,6 +5,7 @@ import { DASHBOARD_HTML } from './html';
 import { getGroqStatus, BIZLI_VERSION, callGroq, autoExtractMemory, sanitizePersonaLeaks } from './brain';
 import { BIZLI_TOOLS } from './tools';
 import { getKVHistory, appendKVHistory, getRelevantMemories } from './memory';
+import { getTestStats } from './tests';
 
 const TOOL_KEY_MAP: Record<string, string> = {
   get_weather:     "API_NINJAS_KEY",
@@ -155,6 +156,7 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
       lastProbeAt: lastModelCheckRaw ? parseInt(lastModelCheckRaw) : null,
     },
     maintenance: { on: maintenanceModeRaw === "on" },
+    tests: await getTestStats(env),
   };
 
   return new Response(JSON.stringify(payload, null, 2), { status: 200, headers: STATS_CORS });
