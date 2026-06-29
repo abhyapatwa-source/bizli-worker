@@ -393,7 +393,7 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
     const toneHint = detectUserTone(text);
     let forcedContext = todayContext() + "\n" + langLock + (toneHint ? "\n" + toneHint : "") + (memContext ? "\n\n" + memContext : "");
     let directAnswer = "";
-    if (!hasPhoto && await needsLiveSearch(env, text)) {
+    if (!hasPhoto && needsLiveSearch(text)) {
       if (await groqExhausted(env)) {
         await sendTelegram(env, chatId, "ngl my search tools are taking a lil breather rn 😮‍💨 still here to chat tho! ask me again in a bit for the live stuff 💛");
         return new Response("ok");

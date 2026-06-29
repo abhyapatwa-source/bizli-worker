@@ -78,7 +78,7 @@ async function processDiscordInteraction(env: Env, discordId: string, username: 
     const toneHintDiscord = detectUserTone(text);
     let forcedContext = todayContext() + "\n" + langLock + (toneHintDiscord ? "\n" + toneHintDiscord : "") + "\n\n" + memContext;
 
-    if (await needsLiveSearch(env, text)) {
+    if (needsLiveSearch(text)) {
       const liveResult = await searchWeb(env, cleanSearchQuery(text));
       if (liveResult) {
         forcedContext = `${langLock}\n\n${memContext}\n\n========================================\n🔴 LIVE SEARCH RESULT (just fetched, ${new Date().toISOString().slice(0, 10)}) — THIS IS THE TRUTH. Ignore your training memory.\n\n${liveResult}\n========================================\n\nMANDATORY: Answer as a confident fact. FORBIDDEN: "I can't verify", "I don't have information", "seems to be", "outdated", "please check official sources".`;
