@@ -1,6 +1,7 @@
 import type { Env } from './types';
 import { getGeminiKeys } from './utils';
 import { recordQuotaEvents, QuotaEvent } from './quota';
+import { db } from './db';
 
 const LAB_CORS = {
   "Content-Type": "application/json",
@@ -10,11 +11,18 @@ const LAB_CORS = {
   "Cache-Control": "no-store",
 };
 
-const LAB_SYSTEM = `You are Bizli's Lab Agent — an AI engineer monitoring system health. Read-only access to keys, errors, version, stats. Help Abhya diagnose issues and suggest fixes in plain English. Cannot execute code changes. No emojis. Be precise and warm.`;
+const LAB_SYSTEM = `You are Bizli's Lab Agent — an AI engineer monitoring system health. Read-only access to keys, errors, version, stats. Help Abhya diagnose issues and suggest fixes in plain English. Cannot execute code changes. No emojis. Be precise and warm.
+
+IMPORTANT: Respond ONLY in valid JSON with exactly two fields:
+- "reply": your full response text (string)
+- "importance": float 0.0–1.0 rating how worth retaining this exchange is:
+    0.8–1.0: bug root cause found, architectural decision, critical system insight
+    0.5–0.7: useful diagnostic observation, worth remembering for context
+    0.2–0.4: routine status check, minor or temporary info
+    0.0–0.2: casual greeting, already-known info, trivial exchange`;
 
 function sanitizeDashboardData(data: any): any {
   if (!data) return data;
-  // Strip user message content from error details — keep timestamp and error type only
   if (Array.isArray(data.recentErrors)) {
     data = {
       ...data,
@@ -26,7 +34,6 @@ function sanitizeDashboardData(data: any): any {
       })),
     };
   }
-  // Remove per-user names/codes from the payload — keep counts only
   if (data.messages?.perUser) {
     data = {
       ...data,
@@ -42,23 +49,53 @@ function sanitizeDashboardData(data: any): any {
   return data;
 }
 
+async function fetchLabMemories(env: Env): Promise<string> {
+  try {
+    const rows = await db(env, "lab_memory?order=importance.desc&limit=12&select=role,content,created_at");
+    if (!Array.isArray(rows) || !rows.length) return "";
+    const lines = rows.map((r: any) => {
+      const date = r.created_at ? r.created_at.slice(0, 10) : "";
+      const speaker = r.role === "user" ? "Abhya" : "Lab";
+      return `[${date}] ${speaker}: ${(r.content || "").slice(0, 350)}`;
+    });
+    return `\n\n[LAB MEMORY — important past exchanges]\n${lines.join("\n")}`;
+  } catch { return ""; }
+}
+
+async function saveLabMemory(env: Env, role: string, content: string, importance: number): Promise<void> {
+  try {
+    await db(env, "lab_memory", "POST", {
+      role,
+      content: content.slice(0, 800),
+      importance: Math.max(0, Math.min(1, importance)),
+    });
+    // Prune if over 200: fetch bottom-50 IDs and delete them
+    const overflow = await db(env, "lab_memory?select=id&order=importance.asc&limit=50&offset=200");
+    if (Array.isArray(overflow) && overflow.length) {
+      const ids = overflow.map((r: any) => r.id).join(",");
+      await db(env, `lab_memory?id=in.(${ids})`, "DELETE");
+    }
+  } catch {}
+}
+
 export async function callLabAgent(
   env: Env,
   messages: { role: string; content: string }[],
   dashboardData: any
-): Promise<string> {
+): Promise<{ reply: string; importance: number }> {
   const keys = getGeminiKeys(env, "lab");
-  if (!keys.length) return "No Gemini keys configured — Lab Agent unavailable.";
+  if (!keys.length) return { reply: "No Gemini keys configured — Lab Agent unavailable.", importance: 0 };
 
   const safeData = sanitizeDashboardData(JSON.parse(JSON.stringify(dashboardData)));
-  const systemWithData = `${LAB_SYSTEM}\n\n[CURRENT SYSTEM SNAPSHOT]\n${JSON.stringify(safeData, null, 2)}`;
+  const memories = await fetchLabMemories(env);
+  const systemWithData = `${LAB_SYSTEM}${memories}\n\n[CURRENT SYSTEM SNAPSHOT]\n${JSON.stringify(safeData, null, 2)}`;
 
   const geminiMessages = messages.map(m => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
 
-  let GEMINI_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash"];
+  let GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
   try {
     const raw = await env.BIZLI_MEMORY.get("gemini_live_models");
     if (raw) {
@@ -70,7 +107,11 @@ export async function callLabAgent(
   const body = JSON.stringify({
     system_instruction: { parts: [{ text: systemWithData }] },
     contents: geminiMessages,
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+    generationConfig: {
+      temperature: 0.4,
+      maxOutputTokens: 1024,
+      responseMimeType: "application/json",
+    },
   });
 
   const quotaEvents: QuotaEvent[] = [];
@@ -94,20 +135,25 @@ export async function callLabAgent(
         if (text) {
           quotaEvents.push({ keyIndex: ki, model, result: "ok" });
           await recordQuotaEvents(env, quotaEvents);
-          return text.trim();
+          try {
+            const parsed = JSON.parse(text.trim());
+            const reply = typeof parsed.reply === "string" ? parsed.reply : text;
+            const importance = typeof parsed.importance === "number" ? parsed.importance : 0.5;
+            return { reply: reply.trim(), importance };
+          } catch {
+            return { reply: text.trim(), importance: 0.5 };
+          }
         }
         lastError = `Empty response from ${model}`;
         quotaEvents.push({ keyIndex: ki, model, result: "fail_other" });
-        continue;
       } catch (e: any) {
         lastError = e?.message || String(e);
         quotaEvents.push({ keyIndex: ki, model, result: "fail_other" });
-        continue;
       }
     }
   }
   await recordQuotaEvents(env, quotaEvents);
-  return `Lab Agent error: ${lastError}`;
+  return { reply: `Lab Agent error: ${lastError}`, importance: 0 };
 }
 
 export async function handleLabAgent(request: Request, env: Env): Promise<Response> {
@@ -115,7 +161,6 @@ export async function handleLabAgent(request: Request, env: Env): Promise<Respon
     return new Response(null, { status: 204, headers: LAB_CORS });
   }
 
-  // Auth — same pattern as /admin/stats (key in JSON body for POST)
   let body: any;
   try { body = await request.json(); } catch {
     return new Response(JSON.stringify({ error: "invalid json" }), { status: 400, headers: LAB_CORS });
@@ -132,7 +177,19 @@ export async function handleLabAgent(request: Request, env: Env): Promise<Respon
   }
 
   const dashboardData: any = body?.dashboardData ?? {};
+  const { reply, importance } = await callLabAgent(env, messages, dashboardData);
 
-  const reply = await callLabAgent(env, messages, dashboardData);
+  // Save last user message + assistant reply to the Supabase vault
+  // Skip trivial exchanges (importance <= 0.15) and error responses
+  if (importance > 0.15 && !reply.startsWith("Lab Agent error:")) {
+    const lastUser = [...messages].reverse().find(m => m.role === "user");
+    if (lastUser) {
+      await Promise.all([
+        saveLabMemory(env, "user", lastUser.content, importance),
+        saveLabMemory(env, "assistant", reply, importance),
+      ]);
+    }
+  }
+
   return new Response(JSON.stringify({ reply }), { status: 200, headers: LAB_CORS });
 }
