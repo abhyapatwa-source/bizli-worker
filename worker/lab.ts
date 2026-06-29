@@ -79,6 +79,20 @@ async function saveLabMemory(env: Env, role: string, content: string, importance
   } catch {}
 }
 
+function trimDashboardData(data: any): any {
+  if (!data) return data;
+  const out: any = { ...data };
+  // Trim perUser list — lab agent doesn't need all users
+  if (out.messages?.perUser) out.messages = { ...out.messages, perUser: out.messages.perUser.slice(0, 5) };
+  // Trim lastBrains — last 5 is enough
+  if (Array.isArray(out.lastBrains)) out.lastBrains = out.lastBrains.slice(0, 5);
+  // Trim recentErrors — last 10 is enough
+  if (Array.isArray(out.recentErrors)) out.recentErrors = out.recentErrors.slice(0, 10);
+  // Remove test results detail — summary only
+  if (out.tests?.recentResults) out.tests = { ...out.tests, recentResults: out.tests.recentResults.slice(0, 5) };
+  return out;
+}
+
 export async function callLabAgent(
   env: Env,
   messages: { role: string; content: string }[],
@@ -87,21 +101,33 @@ export async function callLabAgent(
   const keys = getGeminiKeys(env, "lab");
   if (!keys.length) return { reply: "No Gemini keys configured — Lab Agent unavailable.", importance: 0 };
 
-  const safeData = sanitizeDashboardData(JSON.parse(JSON.stringify(dashboardData)));
-  const memories = await fetchLabMemories(env);
-  const systemWithData = `${LAB_SYSTEM}${memories}\n\n[CURRENT SYSTEM SNAPSHOT]\n${JSON.stringify(safeData, null, 2)}`;
+  const safeData = trimDashboardData(sanitizeDashboardData(JSON.parse(JSON.stringify(dashboardData))));
+
+  // Parallelize memory fetch + KV read — don't do them sequentially
+  const [memories, kvModelsRaw] = await Promise.all([
+    fetchLabMemories(env),
+    env.BIZLI_MEMORY.get("gemini_live_models"),
+  ]);
+
+  const systemWithData = `${LAB_SYSTEM}${memories}\n\n[CURRENT SYSTEM SNAPSHOT]\n${JSON.stringify(safeData)}`;
 
   const geminiMessages = messages.map(m => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
 
-  let GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+  // 2.0-flash first — much faster than 2.5-flash for lab queries; 2.5 as fallback
+  let GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash"];
   try {
-    const raw = await env.BIZLI_MEMORY.get("gemini_live_models");
-    if (raw) {
-      const parsed = JSON.parse(raw) as string[];
-      if (Array.isArray(parsed) && parsed.length) GEMINI_MODELS = parsed;
+    if (kvModelsRaw) {
+      const parsed = JSON.parse(kvModelsRaw) as string[];
+      if (Array.isArray(parsed) && parsed.length) {
+        // Put fastest model first — prefer 2.0-flash over 2.5-flash
+        GEMINI_MODELS = [...parsed].sort((a, b) => {
+          const score = (m: string) => m.includes("2.0") ? 0 : m.includes("1.5") ? 1 : 2;
+          return score(a) - score(b);
+        });
+      }
     }
   } catch {}
 
@@ -110,7 +136,7 @@ export async function callLabAgent(
     contents: geminiMessages,
     generationConfig: {
       temperature: 0.4,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 800,
       responseMimeType: "application/json",
     },
   });
@@ -121,10 +147,17 @@ export async function callLabAgent(
     const key = keys[ki];
     for (const model of GEMINI_MODELS) {
       try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body }
-        );
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 18000);
+        let res: Response;
+        try {
+          res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: ctrl.signal }
+          );
+        } finally {
+          clearTimeout(timer);
+        }
         if (!res.ok) {
           const err = await res.text();
           lastError = `Gemini ${model} ${res.status}: ${err.slice(0, 200)}`;
