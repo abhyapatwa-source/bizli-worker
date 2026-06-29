@@ -4,7 +4,7 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v11.95.0";
+export const BIZLI_VERSION = "v11.98.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -14,7 +14,7 @@ const GROQ_TEXT_MODELS = [
   { id: "openai/gpt-oss-20b",   slot: "20b"  },
 ];
 
-const DEFAULT_VISION_MODEL = "llama-3.2-90b-vision-preview";
+const DEFAULT_VISION_MODEL = "llama-3.2-11b-vision-preview";
 
 // Ordered by preference — probeGroqModels() tests these and picks up to 4 live ones
 const GROQ_CANDIDATE_POOL = [
@@ -29,8 +29,8 @@ const GROQ_CANDIDATE_POOL = [
 ];
 
 const GROQ_VISION_CANDIDATES = [
-  "llama-3.2-90b-vision-preview",
   "llama-3.2-11b-vision-preview",
+  "llama-3.2-90b-vision-preview",
 ];
 
 // Gemini candidate pool — ordered by preference, tested against Lab keys
