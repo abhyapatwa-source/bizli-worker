@@ -58,11 +58,14 @@ export async function callLabAgent(
     parts: [{ text: m.content }],
   }));
 
-  const GEMINI_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-  ];
+  let GEMINI_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash"];
+  try {
+    const raw = await env.BIZLI_MEMORY.get("gemini_live_models");
+    if (raw) {
+      const parsed = JSON.parse(raw) as string[];
+      if (Array.isArray(parsed) && parsed.length) GEMINI_MODELS = parsed;
+    }
+  } catch {}
 
   const body = JSON.stringify({
     system_instruction: { parts: [{ text: systemWithData }] },

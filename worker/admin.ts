@@ -3,7 +3,7 @@ import { db } from './db';
 import { getGroqKeys, getGeminiKeys } from './utils';
 import { sendTelegram, editTelegramMessage, broadcastToTelegram, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAdminSession, lookupUser, setAuthStateHelper, getUserMemories } from './memory';
-import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, probeGroqModels } from './brain';
+import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, probeGroqModels, probeGeminiModels } from './brain';
 import { BIZLI_TOOLS } from './tools';
 import { runAgents } from './agents';
 
@@ -373,30 +373,41 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     const { text, vision } = await getActiveGroqModels(env);
     const lastCheck = await env.BIZLI_MEMORY.get("last_model_check");
     const checkedAt = lastCheck ? new Date(parseInt(lastCheck)).toUTCString() : "never";
+    const gemRaw = await env.BIZLI_MEMORY.get("gemini_live_models").catch(() => null);
+    const gemModels: string[] = gemRaw ? JSON.parse(gemRaw) : ["gemini-3.5-flash", "gemini-2.5-flash"];
     const lines = [
-      `🧠 Active Groq Models — ${BIZLI_VERSION}`,
+      `🧠 Active Models — ${BIZLI_VERSION}`,
       ``,
-      `Text (${text.length}/4):`,
+      `Groq Text (${text.length}/4):`,
       ...text.map((m, i) => `  ${i + 1}. ${m.id}`),
       ``,
-      `Vision: ${vision}`,
+      `Groq Vision: ${vision}`,
+      ``,
+      `Gemini Lab (${gemModels.length}/3):`,
+      ...gemModels.map((m: string, i: number) => `  ${i + 1}. ${m}`),
       ``,
       `Last probed: ${checkedAt}`,
       `Run "!agent refresh models" to probe now.`,
     ];
     await out(lines.join("\n"), false);
   } else if (agentCmd === "refresh models") {
-    await out("🔍 Probing Groq model pool — this takes ~15s...", false);
-    const { text, vision, changed } = await probeGroqModels(env);
+    await out("🔍 Probing Groq + Gemini model pools — ~20s...", false);
+    const [{ text, vision, changed: groqChanged }, { models: gemModels, changed: gemChanged }] = await Promise.all([
+      probeGroqModels(env),
+      probeGeminiModels(env),
+    ]);
     const lines = [
       `✅ Probe complete`,
       ``,
-      `Live text models (${text.length}/4):`,
+      `Groq Text (${text.length}/4):`,
       ...text.map((id, i) => `  ${i + 1}. ${id}`),
       ``,
-      `Live vision: ${vision}`,
+      `Groq Vision: ${vision}`,
       ``,
-      changed ? `⚡ Model list updated in KV.` : `No change from previous list.`,
+      `Gemini Lab (${gemModels.length}/3):`,
+      ...gemModels.map((m: string, i: number) => `  ${i + 1}. ${m}`),
+      ``,
+      groqChanged || gemChanged ? `⚡ Model lists updated in KV.` : `No change from previous lists.`,
     ];
     await out(lines.join("\n"), false);
   } else {

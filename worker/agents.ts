@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { db } from './db';
 import { getGroqKeys, getUserLocalHour, MORNING_MSGS, NIGHT_MSGS } from './utils';
 import { sendTelegram } from './telegram';
-import { getGroqStatus, probeGroqModels } from './brain';
+import { getGroqStatus, probeGroqModels, probeGeminiModels } from './brain';
 
 function pickProactiveMessage(name: string, localHour: number): string {
   const first = name.split(" ")[0];
@@ -139,10 +139,24 @@ export async function runAgents(env: Env): Promise<void> {
     const lastModelCheck = await env.BIZLI_MEMORY.get("last_model_check");
     if (!lastModelCheck || now - parseInt(lastModelCheck) > 43_200_000) {
       await env.BIZLI_MEMORY.put("last_model_check", String(now), { expirationTtl: 90000 });
-      const { text, vision, changed } = await probeGroqModels(env);
-      if (changed && text.length) {
+      const [groqResult, geminiResult] = await Promise.all([
+        probeGroqModels(env),
+        probeGeminiModels(env),
+      ]);
+      const alerts: string[] = [];
+      if (groqResult.changed && groqResult.text.length) {
+        alerts.push(
+          `Groq Text (${groqResult.text.length}/4):\n${groqResult.text.map((m, i) => `  ${i + 1}. ${m}`).join("\n")}\nGroq Vision: ${groqResult.vision}`
+        );
+      }
+      if (geminiResult.changed && geminiResult.models.length) {
+        alerts.push(
+          `Gemini Lab (${geminiResult.models.length}):\n${geminiResult.models.map((m, i) => `  ${i + 1}. ${m}`).join("\n")}`
+        );
+      }
+      if (alerts.length) {
         await sendTelegram(env, env.ADMIN_CHAT_ID,
-          `🔄 Groq model list auto-updated\n\nText (${text.length}/4):\n${text.map((m, i) => `  ${i + 1}. ${m}`).join("\n")}\nVision: ${vision}`
+          `🔄 Model list auto-updated\n\n${alerts.join("\n\n")}`
         ).catch(() => {});
       }
     }

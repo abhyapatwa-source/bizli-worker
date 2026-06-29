@@ -4,7 +4,7 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v11.92.0";
+export const BIZLI_VERSION = "v11.93.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -31,6 +31,15 @@ const GROQ_CANDIDATE_POOL = [
 const GROQ_VISION_CANDIDATES = [
   "llama-3.2-90b-vision-preview",
   "llama-3.2-11b-vision-preview",
+];
+
+// Gemini candidate pool — ordered by preference, tested against Lab keys
+const GEMINI_CANDIDATE_POOL = [
+  "gemini-3.5-flash",
+  "gemini-3-flash-preview",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
 ];
 
 function modelSlot(id: string): string {
@@ -89,6 +98,33 @@ export async function probeGroqModels(env: Env): Promise<{ text: string[]; visio
   const changed = prev !== next && liveText.length > 0;
   if (liveText.length) await env.BIZLI_MEMORY.put("groq_live_models", next, { expirationTtl: 172800 }).catch(() => {});
   return { text: liveText, vision: liveVision, changed };
+}
+
+export async function probeGeminiModels(env: Env): Promise<{ models: string[]; changed: boolean }> {
+  const keys = getGeminiKeys(env, "lab");
+  if (!keys.length) return { models: [], changed: false };
+  const probeKey = keys[0];
+  const live: string[] = [];
+  for (const model of GEMINI_CANDIDATE_POOL) {
+    if (live.length >= 3) break;
+    try {
+      const res = await fetchTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${probeKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "hi" }] }], generationConfig: { maxOutputTokens: 1 } }),
+        },
+        6000
+      );
+      if (res && (res.ok || res.status === 429)) live.push(model);
+    } catch {}
+  }
+  const prev = await env.BIZLI_MEMORY.get("gemini_live_models").catch(() => null);
+  const next = JSON.stringify(live);
+  const changed = prev !== next && live.length > 0;
+  if (live.length) await env.BIZLI_MEMORY.put("gemini_live_models", next, { expirationTtl: 172800 }).catch(() => {});
+  return { models: live, changed };
 }
 
 function msUntilMidnightUTC(): number {
