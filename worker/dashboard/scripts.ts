@@ -224,10 +224,70 @@ function updateHealth(d){
   el.querySelector(".h-lbl").textContent=lbl;
 }
 
+function updateModels(d){
+  var m=d.models;if(!m)return;
+  var lp=document.getElementById("m-lastprobe");
+  if(lp){
+    if(m.lastProbeAt){var diff=Date.now()-m.lastProbeAt;var h=Math.floor(diff/3600000);var mn=Math.floor((diff%3600000)/60000);lp.textContent="last probe: "+h+"h "+mn+"m ago";}
+    else{lp.textContent="not probed yet — run !agent refresh models";}
+  }
+  var gl=document.getElementById("m-groq-text");
+  if(gl){
+    var h="";
+    if(m.groqText&&m.groqText.length){
+      m.groqText.forEach(function(id,i){h+="<div class='mmodel-item'><span class='mmodel-num'>"+(i+1)+".</span><span class='mmodel-id'>"+esc(id)+"</span><span class='mmodel-tag mmodel-tag-live'>LIVE</span></div>";});
+    }else{h="<div style='color:var(--muted);font-size:.72rem;padding:6px'>No models discovered yet &mdash; run !agent refresh models in Telegram</div>";}
+    gl.innerHTML=h;
+  }
+  var gv=document.getElementById("m-groq-vision");
+  if(gv)gv.textContent=m.groqVision||"—";
+  var geml=document.getElementById("m-gemini-text");
+  if(geml){
+    var gh="";
+    if(m.geminiLab&&m.geminiLab.length){
+      m.geminiLab.forEach(function(id,i){gh+="<div class='mmodel-item'><span class='mmodel-num'>"+(i+1)+".</span><span class='mmodel-id'>"+esc(id)+"</span><span class='mmodel-tag mmodel-tag-lab'>LAB</span></div>";});
+    }else{gh="<div style='color:var(--muted);font-size:.72rem;padding:6px'>No models discovered yet</div>";}
+    geml.innerHTML=gh;
+  }
+  var bgm=document.getElementById("b-groq-model");
+  if(bgm&&m.groqText&&m.groqText.length){bgm.textContent=m.groqText.map(function(id){return(id.split("/").pop()||id).replace(/-instruct/,"");}).join(" · ");}
+  var bgems=document.getElementById("b-gem-models");
+  if(bgems&&m.geminiLab&&m.geminiLab.length){bgems.textContent=m.geminiLab.map(function(id){return id.replace("gemini-","");}).join(" · ");}
+}
+function updateMaintenance(d){
+  var on=d.maintenance&&d.maintenance.on;
+  var el=document.getElementById("maint-status-box");
+  if(el){el.className="maint-status "+(on?"maint-on":"maint-off");el.innerHTML="<span class='bdot "+(on?"bdot-amber":"bdot-green")+"'></span>"+(on?"MAINTENANCE ON — Users locked out":"MAINTENANCE OFF — System live");}
+  var cu=document.getElementById("maint-users");
+  if(cu&&d.users)cu.textContent=(d.users.approved)+" approved users "+(on?"currently locked out":"currently active");
+}
+function updateLiveFeed(d){
+  var lb=document.getElementById("lf-brains");
+  if(lb&&d.lastBrains&&d.lastBrains.length){
+    var h="";
+    d.lastBrains.forEach(function(b){
+      var brain=b.brain||"groq";var kl=b.key!=null?" &middot; key "+b.key:"";
+      h+="<div class='ditem'><span class='dbrain "+brain+"'>"+brain.toUpperCase()+"</span><span style='color:var(--muted);font-size:.58rem'>"+kl+"</span><span class='dtime'>"+b.timeAgo+"</span></div>";
+    });
+    lb.innerHTML=h;
+  }
+  var le=document.getElementById("lf-errors");
+  if(le){
+    if(!d.recentErrors||!d.recentErrors.length){le.innerHTML="<div class='no-err'>&#9632; All systems nominal</div>";return;}
+    var eh="";
+    d.recentErrors.slice().reverse().forEach(function(e){var ts=e.timestamp?e.timestamp.replace("T"," ").slice(0,19):"";eh+="<div class='eline'><span class='ets'>["+ts+"] </span>"+esc(e.detail)+"</div>";});
+    le.innerHTML=eh;le.scrollTop=le.scrollHeight;
+  }
+}
+function copyCmd(cmd){
+  try{navigator.clipboard.writeText(cmd);}catch(e){}
+  var t=document.getElementById("maint-copy-toast");
+  if(t){t.style.display="block";setTimeout(function(){t.style.display="none";},1800);}
+}
 function updateAll(d){
   lastD=d;
   updateHealth(d);updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
-  updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);
+  updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);updateModels(d);updateMaintenance(d);updateLiveFeed(d);
   setN("s-users",d.users?d.users.total:0);
   setN("s-appr",d.users?d.users.approved:0);
   setN("s-msgs",d.messages?d.messages.total:0);

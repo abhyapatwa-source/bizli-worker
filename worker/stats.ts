@@ -39,13 +39,18 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
     "India","Juliet","Kilo","Lima","Mike","November","Oscar","Papa","Quebec","Romeo",
     "Sierra","Tango","Uniform"];
 
-  const [groqStatusRaw, lastBrainsRaw, errorsRaw, usersRows, msgsRows, memsCount] = await Promise.all([
+  const [groqStatusRaw, lastBrainsRaw, errorsRaw, usersRows, msgsRows, memsCount,
+    groqLiveRaw, geminiLiveRaw, lastModelCheckRaw, maintenanceModeRaw] = await Promise.all([
     env.BIZLI_MEMORY.get("groq_status"),
     env.BIZLI_MEMORY.get("last_brains"),
     env.BIZLI_MEMORY.get("recent_errors"),
     db(env, "users?select=id,status,display_name,identity_code,last_active&limit=500"),
     db(env, "messages?select=user_id&limit=10000"),
     db(env, "memories?select=count"),
+    env.BIZLI_MEMORY.get("groq_live_models"),
+    env.BIZLI_MEMORY.get("gemini_live_models"),
+    env.BIZLI_MEMORY.get("last_model_check"),
+    env.BIZLI_MEMORY.get("maintenance_mode"),
   ]);
 
   const groqKeys = getGroqKeys(env);
@@ -61,10 +66,10 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
       return { name: KEY_NAMES[i] || `Key${i}`, status: kind, secondsLeft: Math.ceil(remaining / 1000) };
     }
     const mc: Record<string, number> = (gStatus as any).mc || {};
-    const slots = ["70b", "mav", "sct"];
-    const anyReady = slots.some(slot => (mc[`${i}_${slot}`] || 0) <= now);
+    const keySlots = Object.entries(mc).filter(([k]) => k.startsWith(`${i}_`));
+    const anyReady = !keySlots.length || keySlots.some(([, v]) => v <= now);
     if (anyReady) return { name: KEY_NAMES[i] || `Key${i}`, status: "ready", secondsLeft: 0 };
-    const maxExpiry = Math.max(...slots.map(slot => mc[`${i}_${slot}`] || 0));
+    const maxExpiry = Math.max(...keySlots.map(([, v]) => v));
     return { name: KEY_NAMES[i] || `Key${i}`, status: "rpm_cooling", secondsLeft: Math.ceil((maxExpiry - now) / 1000) };
   });
 
@@ -119,6 +124,17 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
     ist: nowDate.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "short", timeStyle: "medium" }),
   };
 
+  let groqLiveText: string[] = [];
+  let groqLiveVision = "llama-3.2-90b-vision-preview";
+  try {
+    if (groqLiveRaw) {
+      const p = JSON.parse(groqLiveRaw);
+      if (p?.text?.length) { groqLiveText = p.text; groqLiveVision = p.vision || groqLiveVision; }
+    }
+  } catch {}
+  let geminiLiveModels: string[] = [];
+  try { if (geminiLiveRaw) { const p = JSON.parse(geminiLiveRaw); if (Array.isArray(p)) geminiLiveModels = p; } } catch {}
+
   const payload = {
     version: BIZLI_VERSION,
     groq: groqData,
@@ -132,6 +148,13 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
     tools,
     memory: { count: memsCount?.[0]?.count ?? 0 },
     serverTime,
+    models: {
+      groqText: groqLiveText,
+      groqVision: groqLiveVision,
+      geminiLab: geminiLiveModels,
+      lastProbeAt: lastModelCheckRaw ? parseInt(lastModelCheckRaw) : null,
+    },
+    maintenance: { on: maintenanceModeRaw === "on" },
   };
 
   return new Response(JSON.stringify(payload, null, 2), { status: 200, headers: STATS_CORS });

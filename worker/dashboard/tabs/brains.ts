@@ -9,7 +9,7 @@ export const BRAINS_HTML = `<div id="brains-section" class="panel">
         <span class="bstat-lbl" id="b-groq-status">&#8212;</span>
       </div>
       <div class="brow"><span class="bk">Keys</span><span class="bv" id="b-groq-keys">&#8212;</span></div>
-      <div class="brow"><span class="bk">Model</span><span class="bv">llama-3.3-70b-versatile</span></div>
+      <div class="brow"><span class="bk">Models</span><span class="bv bmodels" id="b-groq-model">—</span></div>
       <div class="brow"><span class="bk">Last fired</span><span class="bv" id="b-groq-last">&#8212;</span></div>
     </div>
 
@@ -42,7 +42,7 @@ export const BRAINS_HTML = `<div id="brains-section" class="panel">
         <span class="bstat-lbl" style="color:var(--amber)">LAB AGENT</span>
       </div>
       <div class="brow"><span class="bk">Keys</span><span class="bv" id="b-gem-keys">&#8212;</span></div>
-      <div class="brow"><span class="bk">Models</span><span class="bv bmodels">2.5 &middot; 2.0 &middot; 1.5 flash</span></div>
+      <div class="brow"><span class="bk">Models</span><span class="bv bmodels" id="b-gem-models">—</span></div>
       <div class="brow"><span class="bk">Calls today</span><span class="bv" id="b-gem-calls">&#8212;</span></div>
       <div class="brow"><span class="bk" style="color:var(--muted);font-size:.65rem">Not in Bizli&#39;s chain</span><span></span></div>
     </div>
