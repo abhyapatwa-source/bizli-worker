@@ -438,4 +438,8 @@ body::before{
 .plsub{font-size:.55rem;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .plarrow{color:var(--border);font-size:.8rem;flex-shrink:0;line-height:1}
 .pl-lab-row{display:flex;align-items:center;margin:4px 0 6px;padding:4px 6px;background:rgba(245,158,11,.04);border-radius:5px;border:1px solid rgba(245,158,11,.1)}
-.pl-divider{height:1px;background:rgba(0,212,255,.06);margin:6px 0}`;
+.pl-divider{height:1px;background:rgba(0,212,255,.06);margin:6px 0}
+@keyframes skelshine{0%{background-position:-400px 0}100%{background-position:calc(400px + 100%) 0}}
+.skel-row{height:10px;border-radius:4px;background:linear-gradient(90deg,rgba(0,212,255,.04) 25%,rgba(0,212,255,.1) 50%,rgba(0,212,255,.04) 75%);background-size:400px 100%;animation:skelshine 1.5s infinite;margin-bottom:5px}
+.skel-chip{height:24px;border-radius:12px;background:linear-gradient(90deg,rgba(0,212,255,.04) 25%,rgba(0,212,255,.1) 50%,rgba(0,212,255,.04) 75%);background-size:400px 100%;animation:skelshine 1.5s infinite;display:inline-block;margin:3px}
+.skel-kdot{background:linear-gradient(90deg,rgba(0,212,255,.04) 25%,rgba(0,212,255,.09) 50%,rgba(0,212,255,.04) 75%)!important;background-size:400px 100%!important;animation:skelshine 1.5s infinite!important;border-color:rgba(0,212,255,.08)!important;color:transparent!important}`;
