@@ -18,7 +18,7 @@ type worker\brain.ts | findstr BIZLI_VERSION
 
 | Field | Value |
 |---|---|
-| **Deployed version** | v11.94.1 |
+| **Deployed version** | v11.95.0 |
 | **Maintenance mode** | ON (users locked out — turn off before giving access) |
 | **Git** | 5 commits ahead of origin/main — push with `! git push origin main` |
 | **Last session** | 2026-06-30 |
@@ -44,6 +44,7 @@ type worker\brain.ts | findstr BIZLI_VERSION
 | v11.93.1 | Fix needsLiveSearch call sites in discord.ts + index.ts |
 | v11.94.0 | Dashboard: Models tab, Live Feed tab, Maintenance tab; stats.ts slot fix |
 | v11.94.1 | Fix brain name case bug (orb amber forever); fix maintenance command names |
+| v11.95.0 | Brain pipeline visualization: WHO'S DRIVING → BRAIN PIPELINE with live active-node highlight |
 
 ---
 
@@ -102,7 +103,7 @@ Telegram admin commands:
 | Edit 12 | Morphing Orb upgrade (5-layer animated) | LOW |
 | Edit 13 | Sound effects + animations polish | LOW |
 
-**Done this session:** 5B (Models tab), 8 (Live Feed), 11 (Maintenance tab)
+**Done this session:** 5B (Models tab), 8 (Live Feed), 11 (Maintenance tab), 6 (Brain pipeline)
 
 ---
 

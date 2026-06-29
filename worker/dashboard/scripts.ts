@@ -224,6 +224,15 @@ function updateHealth(d){
   el.querySelector(".h-lbl").textContent=lbl;
 }
 
+function updatePipeline(d){
+  var lb=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain.toLowerCase():"groq";
+  var nodes=["pn-groq","pn-or","pn-cf","pn-gem"];
+  nodes.forEach(function(id){var n=document.getElementById(id);if(n){n.classList.remove("pl-active","pl-fallback");}});
+  var active=lb==="groq"?"pn-groq":lb==="openrouter"?"pn-or":(lb==="cf ai"||lb==="worker ai")?"pn-cf":lb==="gemini"?"pn-gem":null;
+  if(active){var an=document.getElementById(active);if(an)an.classList.add(lb==="groq"?"pl-active":"pl-fallback");}
+  var sub=document.getElementById("pn-groq-sub");
+  if(sub&&d.groq){var rk=d.groq.filter(function(k){return k.status==="ready";}).length;sub.textContent=rk+"/"+d.groq.length+" ready";}
+}
 function updateModels(d){
   var m=d.models;if(!m)return;
   var lp=document.getElementById("m-lastprobe");
@@ -287,7 +296,7 @@ function copyCmd(cmd){
 function updateAll(d){
   lastD=d;
   updateHealth(d);updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
-  updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);updateModels(d);updateMaintenance(d);updateLiveFeed(d);
+  updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);updateModels(d);updateMaintenance(d);updateLiveFeed(d);updatePipeline(d);
   setN("s-users",d.users?d.users.total:0);
   setN("s-appr",d.users?d.users.approved:0);
   setN("s-msgs",d.messages?d.messages.total:0);

@@ -423,4 +423,19 @@ body::before{
 .maint-off{background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);color:var(--green)}
 .maint-cmd{background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.1);border-radius:7px;padding:9px 12px;font-size:.73rem;margin:5px 0;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s;user-select:none}
 .maint-cmd:hover{background:rgba(0,212,255,.09)}
-.maint-cmd code{color:var(--cyan);font-family:"Courier New",monospace;font-size:.72rem}`;
+.maint-cmd code{color:var(--cyan);font-family:"Courier New",monospace;font-size:.72rem}
+.pl-wrap{display:flex;align-items:center;gap:4px;margin:6px 0 4px}
+.plnode{flex:1;padding:6px 4px;border-radius:7px;text-align:center;border:1px solid var(--border);background:rgba(0,212,255,.02);transition:all .4s ease;min-width:0}
+.plnode-primary{border-color:rgba(0,212,255,.18)}
+.plnode-last{border-color:rgba(120,120,120,.15)}
+.plnode.pl-active{border-color:var(--blue);background:rgba(0,212,255,.1);box-shadow:0 0 12px rgba(0,212,255,.25)}
+.plnode.pl-fallback{border-color:var(--amber);background:rgba(245,158,11,.08);box-shadow:0 0 8px rgba(245,158,11,.18)}
+.pldot{width:6px;height:6px;border-radius:50%;background:var(--muted);margin:0 auto 3px;opacity:.4;transition:all .4s}
+.plnode.pl-active .pldot{background:var(--green);opacity:1;box-shadow:0 0 6px var(--green);animation:lpulse 1.4s infinite}
+.plnode.pl-fallback .pldot{background:var(--amber);opacity:1;box-shadow:0 0 5px var(--amber)}
+.pldot-lab{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);opacity:.6;vertical-align:middle;margin-right:4px}
+.plname{font-size:.58rem;letter-spacing:.09em;color:var(--text)}
+.plsub{font-size:.55rem;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plarrow{color:var(--border);font-size:.8rem;flex-shrink:0;line-height:1}
+.pl-lab-row{display:flex;align-items:center;margin:4px 0 6px;padding:4px 6px;background:rgba(245,158,11,.04);border-radius:5px;border:1px solid rgba(245,158,11,.1)}
+.pl-divider{height:1px;background:rgba(0,212,255,.06);margin:6px 0}`;
