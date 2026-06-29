@@ -97,6 +97,9 @@ export async function runAgents(env: Env): Promise<void> {
 
     await db(env, `messages?created_at=lt.${new Date(Date.now() - 90 * 86400000).toISOString()}`, "DELETE");
 
+    // Lab memory: prune low-importance entries older than 60 days
+    await db(env, `lab_memory?created_at=lt.${new Date(Date.now() - 60 * 86400000).toISOString()}&importance=lt.0.3`, "DELETE");
+
     if (await env.BIZLI_MEMORY.get("maintenance_mode") !== "on") {
       const tgIdentities = await db(env, "platform_identities?platform=eq.telegram&select=user_id,platform_id");
       const approvedUsers = await db(env, "users?status=eq.approved&select=id,display_name,city");

@@ -473,8 +473,7 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
   } catch (err: any) {
     const errMsg = err?.message || String(err);
     console.error("[Worker Error]", errMsg);
-    const ts = new Date().toISOString();
-    env.BIZLI_MEMORY.put("recent_errors", `[${ts}] chat=${chatId}: ${errMsg.slice(0, 150)}`, { expirationTtl: 86400 }).catch(() => {});
+    appendError(env, `chat=${chatId}: ${errMsg.slice(0, 150)}`).catch(() => {});
     if (errMsg.includes("exhausted")) {
       await sendTelegram(env, chatId, "give me a sec bestie, just cooling down... try again in a moment! ⏳");
     } else {
