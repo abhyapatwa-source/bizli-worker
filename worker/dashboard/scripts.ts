@@ -391,7 +391,7 @@ function fetchLabQuota(){
 }
 
 // LAB AGENT
-var labHistory=[],labBusy=false,LAB_MAX=30;
+var labHistory=[],labBusy=false,LAB_MAX=30,labOldCount=0,labHistoryExpanded=false;
 (function(){
   try{
     var s=localStorage.getItem("bizli_lab_chat");
@@ -399,13 +399,49 @@ var labHistory=[],labBusy=false,LAB_MAX=30;
       var ms=JSON.parse(s);
       if(Array.isArray(ms)&&ms.length){
         labHistory=ms;
+        labOldCount=ms.length;
         var b=document.getElementById("lab-body");
         b.innerHTML="";
-        ms.forEach(function(m){appendLabBubble(m.role==="user"?"u":"a",m.content,false);});
+        var hdr=document.createElement("div");
+        hdr.className="lb-history-hdr";
+        hdr.id="lb-history-hdr";
+        hdr.innerHTML="<span class='lb-history-line'></span><button class='lb-history-btn' onclick='toggleLabHistory()'>"+ms.length+" previous messages &nbsp;&#9662;</button><span class='lb-history-line'></span>";
+        b.appendChild(hdr);
+        var msgs=document.createElement("div");
+        msgs.id="lb-history-msgs";
+        b.appendChild(msgs);
+        var sep=document.createElement("div");
+        sep.className="lb-session-sep";
+        sep.textContent="New Session";
+        b.appendChild(sep);
+        var sys=document.createElement("div");
+        sys.className="lbsys";
+        sys.textContent="Lab Agent online. Ready.";
+        b.appendChild(sys);
+        return;
       }
     }
   }catch(e){}
 })();
+function toggleLabHistory(){
+  var msgs=document.getElementById("lb-history-msgs");
+  var btn=document.querySelector(".lb-history-btn");
+  if(!msgs||!btn)return;
+  if(!labHistoryExpanded){
+    labHistory.slice(0,labOldCount).forEach(function(m){
+      var d=document.createElement("div");
+      d.className="lbmsg lb-old "+(m.role==="user"?"lbu":"lba");
+      d.textContent=m.content;
+      msgs.appendChild(d);
+    });
+    btn.innerHTML=labOldCount+" previous messages &nbsp;&#9652;";
+    labHistoryExpanded=true;
+  }else{
+    msgs.innerHTML="";
+    btn.innerHTML=labOldCount+" previous messages &nbsp;&#9662;";
+    labHistoryExpanded=false;
+  }
+}
 function appendLabBubble(type,text,scroll){
   var b=document.getElementById("lab-body");
   var d=document.createElement("div");

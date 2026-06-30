@@ -401,6 +401,13 @@ body::before{
   .lnav-item.active{background:rgba(0,212,255,.1)}
   #app{margin-left:60px!important}
 }
+.lb-history-hdr{display:flex;align-items:center;gap:8px;margin:4px 0 8px}
+.lb-history-line{flex:1;height:1px;background:rgba(0,212,255,.1)}
+.lb-history-btn{font-size:.68rem;color:var(--muted);background:none;border:none;cursor:pointer;letter-spacing:.06em;white-space:nowrap;padding:2px 8px;border-radius:4px;transition:color .15s}
+.lb-history-btn:hover{color:var(--blue)}
+#lb-history-msgs{display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.lb-old{opacity:.45}
+.lb-session-sep{text-align:center;font-size:.63rem;color:rgba(0,212,255,.28);letter-spacing:.14em;margin:4px 0 6px}
 #lab-quota-bar{padding:5px 12px 6px;border-top:1px solid rgba(255,255,255,.07);flex-shrink:0}
 #lab-quota-text{font-size:.68rem;color:var(--muted);margin-bottom:3px;letter-spacing:.04em}
 #lab-quota-track{height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
