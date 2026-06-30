@@ -83,6 +83,11 @@ export default {
       if (!imgData) return new Response("Not found", { status: 404 });
       return new Response(imgData, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" } });
     }
+    if (request.method === "GET" && url.pathname === "/bizli-robot.png") {
+      const imgData = await env.BIZLI_MEMORY.get("bizli_robot_image", { type: "arrayBuffer" });
+      if (!imgData) return new Response("Not found", { status: 404 });
+      return new Response(imgData, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" } });
+    }
     if (request.method === "GET" && url.pathname === "/privacy") return new Response(PRIVACY_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     if (request.method === "GET" && url.pathname === "/terms") return new Response(TERMS_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     return new Response("Bizli is alive.", { status: 200 });
