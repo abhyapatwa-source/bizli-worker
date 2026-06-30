@@ -1,14 +1,15 @@
-export const ORB_HTML = `<!-- ORB -->
+export const ORB_HTML = `<!-- BIZLI CAT -->
 <div class="panel" id="orb-section">
-  <div id="orb-wrap">
+  <div id="cat-wrap">
     <div class="ring r1"></div>
     <div class="ring r2"></div>
     <div class="ring r3"></div>
     <div class="ring r4"></div>
     <div class="ring r5"></div>
-    <div id="orb">
-      <div class="orb-plasma"></div>
-      <div class="orb-core"></div>
+    <div id="cat-holo">
+      <img id="cat-img" src="/bizli-cat.png" alt="Bizli">
+      <div class="cat-scanline"></div>
+      <div class="cat-glare"></div>
     </div>
     <div class="particle pa1"></div>
     <div class="particle pa2"></div>

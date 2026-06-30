@@ -45,7 +45,7 @@ function setN(id,val){
 }
 
 function updateOrb(d){
-  var orb=document.getElementById("orb");
+  var orb=document.getElementById("cat-holo");
   var obrain=document.getElementById("orb-brain");
   var osub=document.getElementById("orb-sub");
   var ost=document.getElementById("orb-status");

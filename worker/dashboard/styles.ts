@@ -96,54 +96,39 @@ body::before{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:20px 12px;min-height:360px;
 }
-#orb-wrap{position:relative;width:210px;height:210px;flex-shrink:0}
-#orb{
+#cat-wrap{position:relative;width:210px;height:210px;flex-shrink:0}
+#cat-holo{
   position:absolute;top:50%;left:50%;
-  width:96px;height:96px;margin:-48px 0 0 -48px;
-  border-radius:50%;
-  background:radial-gradient(circle at 36% 34%,rgba(255,255,255,.28),rgba(0,212,255,.72) 38%,rgba(0,40,90,.95));
-  box-shadow:0 0 28px var(--blue),0 0 56px rgba(0,212,255,.45),0 0 100px rgba(0,212,255,.18),inset 0 0 20px rgba(0,212,255,.15);
-  animation:breathe 3.8s ease-in-out infinite,morph 9s ease-in-out infinite;
-  transition:box-shadow 1.2s ease,background 1.2s ease;
-  overflow:hidden;
+  width:118px;height:150px;margin:-75px 0 0 -59px;
+  border-radius:10px;overflow:hidden;
+  border:1.5px solid rgba(0,212,255,.8);
+  box-shadow:0 0 22px rgba(0,212,255,.9),0 0 44px rgba(0,212,255,.4),0 0 80px rgba(0,212,255,.15),inset 0 0 14px rgba(0,212,255,.12);
+  animation:catbreathe 4.2s ease-in-out infinite;
+  transition:box-shadow 1.2s ease,border-color 1.2s ease;
 }
-@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
-@keyframes morph{
-  0%,100%{border-radius:50%}
-  20%{border-radius:58% 42% 56% 44%/48% 52% 48% 52%}
-  40%{border-radius:44% 56% 42% 58%/52% 44% 56% 48%}
-  60%{border-radius:52% 48% 58% 42%/44% 58% 42% 56%}
-  80%{border-radius:46% 54% 44% 56%/56% 46% 54% 44%}
+@keyframes catbreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.022)}}
+#cat-holo.amber{
+  border-color:rgba(245,158,11,.85);
+  box-shadow:0 0 22px rgba(245,158,11,.9),0 0 44px rgba(245,158,11,.4),0 0 80px rgba(245,158,11,.15),inset 0 0 14px rgba(245,158,11,.12);
 }
-#orb.amber{
-  background:radial-gradient(circle at 36% 34%,rgba(255,250,200,.28),rgba(245,158,11,.72) 38%,rgba(70,35,0,.95));
-  box-shadow:0 0 28px var(--amber),0 0 56px rgba(245,158,11,.45),0 0 100px rgba(245,158,11,.18),inset 0 0 20px rgba(245,158,11,.15);
+#cat-holo.red{
+  border-color:rgba(239,68,68,.85);
+  box-shadow:0 0 22px rgba(239,68,68,.9),0 0 44px rgba(239,68,68,.4),0 0 80px rgba(239,68,68,.15),inset 0 0 14px rgba(239,68,68,.12);
 }
-#orb.red{
-  background:radial-gradient(circle at 36% 34%,rgba(255,210,210,.28),rgba(239,68,68,.72) 38%,rgba(70,0,0,.95));
-  box-shadow:0 0 28px var(--red),0 0 56px rgba(239,68,68,.45),0 0 100px rgba(239,68,68,.18),inset 0 0 20px rgba(239,68,68,.15);
+#cat-img{width:100%;height:100%;object-fit:cover;display:block;filter:brightness(1.06) saturate(1.2)}
+.cat-scanline{
+  position:absolute;left:0;right:0;height:35%;
+  background:linear-gradient(to bottom,transparent,rgba(0,212,255,.14) 50%,transparent);
+  animation:catscan 3.5s linear infinite;pointer-events:none;
 }
-.orb-plasma{
-  position:absolute;inset:6px;border-radius:50%;
-  background:conic-gradient(from 0deg,transparent 0%,rgba(0,212,255,.35) 30%,rgba(61,219,217,.5) 50%,rgba(0,212,255,.2) 70%,transparent 100%);
-  animation:plasma 4s linear infinite;
-  filter:blur(4px);
-  mix-blend-mode:screen;
+.cat-glare{
+  position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(0,212,255,.1) 0%,transparent 55%,rgba(0,212,255,.05) 100%);
+  animation:catglare 5s ease-in-out infinite;pointer-events:none;
 }
-@keyframes plasma{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-#orb.amber .orb-plasma{background:conic-gradient(from 0deg,transparent 0%,rgba(245,158,11,.35) 30%,rgba(255,200,50,.5) 50%,rgba(245,158,11,.2) 70%,transparent 100%)}
-#orb.red .orb-plasma{background:conic-gradient(from 0deg,transparent 0%,rgba(239,68,68,.35) 30%,rgba(255,120,120,.5) 50%,rgba(239,68,68,.2) 70%,transparent 100%)}
-.orb-core{
-  position:absolute;top:50%;left:50%;
-  width:22px;height:22px;margin:-11px 0 0 -11px;
-  border-radius:50%;
-  background:radial-gradient(circle,rgba(255,255,255,.95),rgba(0,212,255,.7) 55%,transparent);
-  box-shadow:0 0 14px rgba(255,255,255,.9),0 0 28px rgba(0,212,255,.7);
-  animation:corepulse 2.6s ease-in-out infinite;
-}
-@keyframes corepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.65;transform:scale(.75)}}
-#orb.amber .orb-core{background:radial-gradient(circle,rgba(255,255,200,.95),rgba(245,158,11,.7) 55%,transparent);box-shadow:0 0 14px rgba(255,250,150,.9),0 0 28px rgba(245,158,11,.7)}
-#orb.red .orb-core{background:radial-gradient(circle,rgba(255,220,220,.95),rgba(239,68,68,.7) 55%,transparent);box-shadow:0 0 14px rgba(255,180,180,.9),0 0 28px rgba(239,68,68,.7)}
+@keyframes catbreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.022)}}
+@keyframes catscan{0%{top:-35%}100%{top:100%}}
+@keyframes catglare{0%,100%{opacity:.25}50%{opacity:.75}}
 .ring{
   position:absolute;top:50%;left:50%;border-radius:50%;
   border:1px solid rgba(0,212,255,.28);
@@ -270,8 +255,8 @@ body::before{
 @media(max-width:560px){
   .grid{grid-template-columns:1fr}
   #orb-section,#brain-section,#drive-section,#err-section,#users-section,#tools-section,#vitals-section{grid-column:1}
-  #orb-wrap{width:170px;height:170px}
-  #orb{width:78px;height:78px;margin:-39px 0 0 -39px}
+  #cat-wrap{width:170px;height:170px}
+  #cat-holo{width:96px;height:122px;margin:-61px 0 0 -48px}
   .r1{width:112px;height:112px}.r2{width:138px;height:138px}.r3{width:164px;height:164px}
 }
 #lab{
