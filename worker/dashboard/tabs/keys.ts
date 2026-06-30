@@ -21,7 +21,7 @@ export const KEYS_HTML = `<!-- BRAIN MAP -->
       <div class="adot standby" id="wai-dot"></div>
       <div>
         <div style="font-size:.7rem">Worker AI</div>
-        <div style="font-size:.56rem;color:var(--muted)">Last resort</div>
+        <div style="font-size:.56rem;color:var(--muted)">Last select</div>
       </div>
     </div>
   </div>

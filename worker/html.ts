@@ -62,7 +62,7 @@ ${LEFTNAV_HTML}
           <div class="skel-row" style="max-width:70%"></div>
           <div class="skel-row" style="max-width:90%"></div>
         </div>
-        <div id="met-stable" style="font-size:.62rem;color:var(--green);margin-top:10px;text-align:center;letter-spacing:.1em">&#9632; SYSTEM STABLE</div>
+        <div id="met-stable" style="font-size:.62rem;color:var(--green);margin-top:10px;text-align:center;letter-spacing:.1em">&#9679; SYSTEM STABLE</div>
       </div>
     </div>
     <div id="page-footer">&#169; BIZLI LAB &nbsp;&#183;&nbsp; AI SYSTEMS CONTROL CENTER</div>

@@ -61,7 +61,14 @@ export const ORB_HTML = `<!-- BIZLI CAT -->
   </div>
   <div class="pl-divider"></div>
   <div style="font-size:.65rem;color:var(--muted);letter-spacing:.1em;margin-bottom:5px">RECENT CALLS</div>
-  <div id="drive-list" style="display:flex;flex-direction:column;gap:4px;max-height:130px;overflow-y:auto">
+  <div id="drive-list" style="display:flex;flex-direction:column;gap:4px;max-height:110px;overflow-y:auto">
+    <div class="skel-row"></div>
+    <div class="skel-row" style="max-width:80%"></div>
+    <div class="skel-row" style="max-width:65%"></div>
+  </div>
+  <div class="pl-divider"></div>
+  <div class="mini-lb-title">USER LEADERBOARD</div>
+  <div id="mini-user-list">
     <div class="skel-row"></div>
     <div class="skel-row" style="max-width:80%"></div>
     <div class="skel-row" style="max-width:65%"></div>

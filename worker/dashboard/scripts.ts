@@ -124,8 +124,12 @@ function updateErrors(d){
 
 function updateUsers(d){
   var list=document.getElementById("user-list");
+  var mini=document.getElementById("mini-user-list");
   if(!d.messages||!d.messages.perUser||!d.messages.perUser.length){
-    list.innerHTML="<div style='color:var(--muted);font-size:.68rem'>No users yet</div>";return;
+    var empty="<div style='color:var(--muted);font-size:.68rem'>No users yet</div>";
+    if(list)list.innerHTML=empty;
+    if(mini)mini.innerHTML=empty;
+    return;
   }
   var users=d.messages.perUser.slice(0,10);
   var maxc=users[0].count||1;
@@ -141,7 +145,8 @@ function updateUsers(d){
     var barStyle="width:"+pct+"%"+(isTop?";box-shadow:0 0 8px rgba(0,212,255,.5)":"");
     h+="<div class='ubar-wrap'><div class='ubar' style='"+barStyle+"'></div></div></div>";
   });
-  list.innerHTML=h;
+  if(list)list.innerHTML=h;
+  if(mini)mini.innerHTML=h;
 }
 
 var TOOL_ICONS={get_weather:"cloud",get_current_time:"clock",search_web:"search",convert_currency:"dollar-sign",get_movie_info:"film",read_url:"link",save_to_vault:"lock",send_gif:"image",search_youtube:"play-circle",show_map:"map-pin"};
