@@ -50,6 +50,7 @@ import { handleDiscord, handleDiscordRegister } from './discord';
 import { handleAdminStats, handleDashboard, handleWebChat } from './stats';
 import { handleLabAgent } from './lab';
 import { handleLabQuota } from './quota';
+import { runBizliTests, getTestStats } from './tests';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -65,6 +66,14 @@ export default {
     if (request.method === "GET" && url.pathname === "/chat") return new Response(CHAT_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     if (request.method === "POST" && url.pathname === "/web-chat") return handleWebChat(request, env);
     if (request.method === "GET" && url.pathname === "/lab/quota") return handleLabQuota(request, env);
+    if (request.method === "GET" && url.pathname === "/admin/run-tests") {
+      const key = url.searchParams.get("key");
+      if (key !== env.ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401 });
+      await env.BIZLI_MEMORY.delete("last_test_run");
+      const { run, passed } = await runBizliTests(env);
+      const stats = await getTestStats(env);
+      return new Response(JSON.stringify({ run, passed, stats }), { headers: { "Content-Type": "application/json" } });
+    }
     if (url.pathname === "/lab/agent") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
       if (request.method === "POST") return handleLabAgent(request, env);
