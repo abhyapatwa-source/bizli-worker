@@ -103,10 +103,18 @@ body::before{
   border-radius:50%;
   background:radial-gradient(circle at 36% 34%,rgba(255,255,255,.28),rgba(0,212,255,.72) 38%,rgba(0,40,90,.95));
   box-shadow:0 0 28px var(--blue),0 0 56px rgba(0,212,255,.45),0 0 100px rgba(0,212,255,.18),inset 0 0 20px rgba(0,212,255,.15);
-  animation:breathe 3.8s ease-in-out infinite;
+  animation:breathe 3.8s ease-in-out infinite,morph 9s ease-in-out infinite;
   transition:box-shadow 1.2s ease,background 1.2s ease;
+  overflow:hidden;
 }
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+@keyframes morph{
+  0%,100%{border-radius:50%}
+  20%{border-radius:58% 42% 56% 44%/48% 52% 48% 52%}
+  40%{border-radius:44% 56% 42% 58%/52% 44% 56% 48%}
+  60%{border-radius:52% 48% 58% 42%/44% 58% 42% 56%}
+  80%{border-radius:46% 54% 44% 56%/56% 46% 54% 44%}
+}
 #orb.amber{
   background:radial-gradient(circle at 36% 34%,rgba(255,250,200,.28),rgba(245,158,11,.72) 38%,rgba(70,35,0,.95));
   box-shadow:0 0 28px var(--amber),0 0 56px rgba(245,158,11,.45),0 0 100px rgba(245,158,11,.18),inset 0 0 20px rgba(245,158,11,.15);
@@ -115,6 +123,27 @@ body::before{
   background:radial-gradient(circle at 36% 34%,rgba(255,210,210,.28),rgba(239,68,68,.72) 38%,rgba(70,0,0,.95));
   box-shadow:0 0 28px var(--red),0 0 56px rgba(239,68,68,.45),0 0 100px rgba(239,68,68,.18),inset 0 0 20px rgba(239,68,68,.15);
 }
+.orb-plasma{
+  position:absolute;inset:6px;border-radius:50%;
+  background:conic-gradient(from 0deg,transparent 0%,rgba(0,212,255,.35) 30%,rgba(61,219,217,.5) 50%,rgba(0,212,255,.2) 70%,transparent 100%);
+  animation:plasma 4s linear infinite;
+  filter:blur(4px);
+  mix-blend-mode:screen;
+}
+@keyframes plasma{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+#orb.amber .orb-plasma{background:conic-gradient(from 0deg,transparent 0%,rgba(245,158,11,.35) 30%,rgba(255,200,50,.5) 50%,rgba(245,158,11,.2) 70%,transparent 100%)}
+#orb.red .orb-plasma{background:conic-gradient(from 0deg,transparent 0%,rgba(239,68,68,.35) 30%,rgba(255,120,120,.5) 50%,rgba(239,68,68,.2) 70%,transparent 100%)}
+.orb-core{
+  position:absolute;top:50%;left:50%;
+  width:22px;height:22px;margin:-11px 0 0 -11px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.95),rgba(0,212,255,.7) 55%,transparent);
+  box-shadow:0 0 14px rgba(255,255,255,.9),0 0 28px rgba(0,212,255,.7);
+  animation:corepulse 2.6s ease-in-out infinite;
+}
+@keyframes corepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.65;transform:scale(.75)}}
+#orb.amber .orb-core{background:radial-gradient(circle,rgba(255,255,200,.95),rgba(245,158,11,.7) 55%,transparent);box-shadow:0 0 14px rgba(255,250,150,.9),0 0 28px rgba(245,158,11,.7)}
+#orb.red .orb-core{background:radial-gradient(circle,rgba(255,220,220,.95),rgba(239,68,68,.7) 55%,transparent);box-shadow:0 0 14px rgba(255,180,180,.9),0 0 28px rgba(239,68,68,.7)}
 .ring{
   position:absolute;top:50%;left:50%;border-radius:50%;
   border:1px solid rgba(0,212,255,.28);
@@ -122,7 +151,9 @@ body::before{
 }
 .r1{width:138px;height:138px;animation:rspin 7s linear infinite;border-color:rgba(0,212,255,.4)}
 .r2{width:168px;height:168px;animation:rspin 11s linear infinite reverse;border-color:rgba(61,219,217,.28)}
-.r3{width:200px;height:200px;animation:rspin 17s linear infinite;border-color:rgba(0,212,255,.16);border-style:dashed}
+.r3{width:192px;height:192px;animation:rspin 17s linear infinite;border-color:rgba(0,212,255,.16);border-style:dashed}
+.r4{width:204px;height:204px;animation:rspin 24s linear infinite reverse;border-color:rgba(61,219,217,.1);border-style:dotted}
+.r5{width:214px;height:214px;animation:rspin 33s linear infinite;border-color:rgba(0,212,255,.07);border-width:2px}
 @keyframes rspin{
   from{transform:translate(-50%,-50%) rotateX(62deg) rotateZ(0deg)}
   to{transform:translate(-50%,-50%) rotateX(62deg) rotateZ(360deg)}
@@ -138,6 +169,8 @@ body::before{
 .pa3{animation:ob2 6.8s linear infinite .4s}
 .pa4{animation:ob2 6.8s linear infinite 1.9s;background:var(--cyan);box-shadow:0 0 7px var(--cyan)}
 .pa5{animation:ob3 10s linear infinite .6s;width:4px;height:4px;margin:-2px 0 0 -2px;opacity:.7}
+.pa6{animation:ob1 3.2s linear infinite 1.6s;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;background:rgba(255,255,255,.85);box-shadow:0 0 5px rgba(255,255,255,.8)}
+.pa7{animation:ob3 13s linear infinite 3.5s;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;background:var(--cyan);box-shadow:0 0 5px var(--cyan);opacity:.6}
 @keyframes ob1{from{transform:rotate(0deg) translateX(72px)}to{transform:rotate(360deg) translateX(72px)}}
 @keyframes ob2{from{transform:rotate(0deg) translateX(88px)}to{transform:rotate(360deg) translateX(88px)}}
 @keyframes ob3{from{transform:rotate(0deg) translateX(104px)}to{transform:rotate(360deg) translateX(104px)}}

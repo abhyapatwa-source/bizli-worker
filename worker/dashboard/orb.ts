@@ -4,12 +4,19 @@ export const ORB_HTML = `<!-- ORB -->
     <div class="ring r1"></div>
     <div class="ring r2"></div>
     <div class="ring r3"></div>
-    <div id="orb"></div>
+    <div class="ring r4"></div>
+    <div class="ring r5"></div>
+    <div id="orb">
+      <div class="orb-plasma"></div>
+      <div class="orb-core"></div>
+    </div>
     <div class="particle pa1"></div>
     <div class="particle pa2"></div>
     <div class="particle pa3"></div>
     <div class="particle pa4"></div>
     <div class="particle pa5"></div>
+    <div class="particle pa6"></div>
+    <div class="particle pa7"></div>
   </div>
   <div id="orb-info">
     <div id="orb-status">&#x25C9; CORE SYSTEM</div>
