@@ -104,10 +104,7 @@ export async function callLabAgent(
   const safeData = trimDashboardData(sanitizeDashboardData(JSON.parse(JSON.stringify(dashboardData))));
 
   // Parallelize memory fetch + KV read — don't do them sequentially
-  const [memories, kvModelsRaw] = await Promise.all([
-    fetchLabMemories(env),
-    env.BIZLI_MEMORY.get("gemini_live_models"),
-  ]);
+  const memories = await fetchLabMemories(env);
 
   const systemWithData = `${LAB_SYSTEM}${memories}\n\n[CURRENT SYSTEM SNAPSHOT]\n${JSON.stringify(safeData)}`;
 
@@ -116,27 +113,15 @@ export async function callLabAgent(
     parts: [{ text: m.content }],
   }));
 
-  // 2.0-flash first — much faster than 2.5-flash for lab queries; 2.5 as fallback
-  let GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash"];
-  try {
-    if (kvModelsRaw) {
-      const parsed = JSON.parse(kvModelsRaw) as string[];
-      if (Array.isArray(parsed) && parsed.length) {
-        // Put fastest model first — prefer 2.0-flash over 2.5-flash
-        GEMINI_MODELS = [...parsed].sort((a, b) => {
-          const score = (m: string) => m.includes("2.0") ? 0 : m.includes("1.5") ? 1 : 2;
-          return score(a) - score(b);
-        });
-      }
-    }
-  } catch {}
+  // Always use known-fast models — ignore KV auto-discovery for Lab (KV may have slow/unproven models)
+  const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
 
   const body = JSON.stringify({
     system_instruction: { parts: [{ text: systemWithData }] },
     contents: geminiMessages,
     generationConfig: {
       temperature: 0.4,
-      maxOutputTokens: 800,
+      maxOutputTokens: 500,
       responseMimeType: "application/json",
     },
   });
@@ -148,7 +133,7 @@ export async function callLabAgent(
     for (const model of GEMINI_MODELS) {
       try {
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 18000);
+        const timer = setTimeout(() => ctrl.abort(), 8000);
         let res: Response;
         try {
           res = await fetch(
