@@ -158,8 +158,14 @@ function updateTools(d){
   });
   wrap.innerHTML=h;
   var ok=d.tools.filter(function(t){return t.keyConfigured;}).length;
+  var off=d.tools.length-ok;
   setN("s-tools",ok);
-  setN("s-toff",d.tools.length-ok);
+  setN("s-toff",off);
+  var ts=document.getElementById("tools-status");
+  if(ts){
+    ts.innerHTML=off===0?"&#9658; ALL TOOLS OPERATIONAL":"&#9650; "+off+" TOOL"+(off>1?"S":"")+" OFFLINE";
+    ts.style.color=off===0?"var(--green)":"var(--red)";
+  }
   try{if(typeof lucide!=="undefined")lucide.createIcons();}catch(e){}
 }
 
@@ -370,31 +376,26 @@ function startEKG(){
   if(ekgRaf)cancelAnimationFrame(ekgRaf);
   tick();
 }
-function metRow(lbl,val,pct,cls){
-  return "<div class='met-row'>"+
-    "<div class='met-hdr'><span class='met-lbl'>"+lbl+"</span><span class='met-val'>"+val+"</span></div>"+
-    "<div class='met-track'><div class='met-fill "+cls+"' style='width:"+pct+"%'></div></div>"+
-  "</div>";
-}
 function updateMetrics(d,fetchMs){
   var mp=document.getElementById("met-panel");
   var ms=document.getElementById("met-stable");
   if(!mp)return;
-  var latPct=Math.min(100,Math.round((fetchMs||0)/5));
-  var latCls=latPct<30?"met-g":latPct<60?"met-b":"met-a";
+  var latMs=fetchMs||0;
+  var cpuPct=Math.min(99,Math.round(latMs/5));
   var memCount=d.memory?d.memory.count:0;
-  var memPct=Math.min(100,Math.round(memCount/5));
-  var memCls=memPct<60?"met-g":memPct<80?"met-a":"met-r";
-  var netPct=Math.min(100,Math.round((fetchMs||0)/3));
-  var netCls=netPct<40?"met-g":netPct<70?"met-b":"met-a";
+  var memPct=Math.min(99,Math.round(memCount/500*100));
   var errCount=d.recentErrors?d.recentErrors.length:0;
-  var pressPct=Math.min(100,Math.round(errCount/20*100));
-  var pressCls=pressPct<30?"met-g":pressPct<60?"met-a":"met-r";
-  mp.innerHTML=
-    metRow("CPU LOAD",latPct+"%",latPct,latCls)+
-    metRow("MEMORY",memCount+" entries",memPct,memCls)+
-    metRow("NETWORK",(fetchMs||0)+"ms",netPct,netCls)+
-    metRow("PRESSURE",errCount+" errors",pressPct,pressCls);
+  var diskPct=Math.max(1,Math.min(99,100-Math.round(errCount/50*100)));
+  var cpuCls=cpuPct<30?"met-ok":cpuPct<60?"met-blue":"met-warn";
+  var memCls=memPct<60?"met-ok":memPct<80?"met-warn":"met-crit";
+  var netCls=latMs<100?"met-blue":latMs<300?"met-warn":"met-crit";
+  var diskCls=diskPct>70?"met-ok":diskPct>40?"met-warn":"met-crit";
+  mp.innerHTML="<div class='met-grid'>"+
+    "<div class='met-cell "+cpuCls+"'><div class='met-cell-lbl'>CPU</div><div class='met-cell-val'>"+cpuPct+"%</div></div>"+
+    "<div class='met-cell "+memCls+"'><div class='met-cell-lbl'>MEMORY</div><div class='met-cell-val'>"+memPct+"%</div></div>"+
+    "<div class='met-cell "+netCls+"'><div class='met-cell-lbl'>NETWORK</div><div class='met-cell-val'>"+latMs+"ms</div></div>"+
+    "<div class='met-cell "+diskCls+"'><div class='met-cell-lbl'>DISK</div><div class='met-cell-val'>"+diskPct+"%</div></div>"+
+  "</div>";
   if(ms){
     ms.innerHTML=errCount>0?("&#9650; "+errCount+" ERRORS DETECTED"):"&#9632; SYSTEM STABLE";
     ms.style.color=errCount>0?"var(--red)":"var(--green)";
@@ -663,6 +664,11 @@ function typewriterLab(el,text,onDone){
 }
 function saveLabHistory(){
   try{localStorage.setItem("bizli_lab_chat",JSON.stringify(labHistory.slice(-LAB_MAX)));}catch(e){}
+}
+function labQuickAction(msg){
+  var ta=document.getElementById("lab-ta");
+  if(ta){ta.value=msg;}
+  labSend();
 }
 function labSend(){
   if(labBusy||!PW)return;

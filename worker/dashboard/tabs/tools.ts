@@ -11,4 +11,5 @@ export const TOOLS_HTML = `<!-- TOOLS -->
     <div class="skel-chip" style="width:68px"></div>
     <div class="skel-chip" style="width:100px"></div>
   </div>
+  <div id="tools-status" style="text-align:center;margin-top:10px;font-size:.68rem;letter-spacing:.1em;color:var(--muted)">&#9658; CHECKING...</div>
 </div>`;

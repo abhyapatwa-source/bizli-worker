@@ -19,6 +19,6 @@ export const LEFTNAV_HTML = `<nav id="leftnav">
   </div>
   <div id="lnav-foot">
     <span class="live-dot"></span>
-    <span class="live-txt">LIVE</span>
+    <span class="live-txt">LIVE SYSTEM</span>
   </div>
 </nav>`;

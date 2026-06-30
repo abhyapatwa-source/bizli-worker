@@ -1,5 +1,11 @@
 export const ORB_HTML = `<!-- BIZLI CAT -->
 <div class="panel" id="orb-section">
+  <div class="ni-hdr">
+    <div class="ni-title">NEURAL INTERFACE</div>
+    <div class="ni-sub">GROQ &nbsp;&#183;&nbsp; AI ENTITY</div>
+  </div>
+  <div class="ni-corner ni-tl"></div>
+  <div class="ni-corner ni-tr"></div>
   <div id="cat-wrap">
     <div class="ring r1"></div>
     <div class="ring r2"></div>
@@ -32,7 +38,7 @@ export const ORB_HTML = `<!-- BIZLI CAT -->
     <div class="plnode plnode-primary" id="pn-groq">
       <div class="pldot" id="pn-groq-dot"></div>
       <div class="plname">GROQ</div>
-      <div class="plsub" id="pn-groq-sub">—/16 ready</div>
+      <div class="plsub" id="pn-groq-sub">&#8212;/16 ready</div>
     </div>
     <div class="plarrow">&#x2192;</div>
     <div class="plnode" id="pn-or">
