@@ -286,9 +286,12 @@ body::before{
   display:flex;align-items:center;gap:8px;flex-shrink:0;
 }
 .lab-title{font-size:.76rem;letter-spacing:.28em;color:var(--blue);font-weight:700}
+#lab-snd-btn{background:none;border:1px solid rgba(0,212,255,.15);border-radius:4px;cursor:pointer;font-size:.6rem;letter-spacing:.08em;color:var(--muted);padding:2px 6px;transition:color .15s,border-color .15s;margin-left:auto;margin-right:6px;white-space:nowrap}
+#lab-snd-btn:hover{color:var(--blue);border-color:rgba(0,212,255,.4)}
+#lab-snd-btn.snd-on{color:var(--cyan);border-color:rgba(61,219,217,.4)}
 .lab-dot{width:7px;height:7px;border-radius:50%;background:var(--green);
   box-shadow:0 0 7px var(--green);animation:lpulse 1.6s ease-in-out infinite;
-  flex-shrink:0;margin-left:auto}
+  flex-shrink:0}
 #lab-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
 .lbmsg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:.8rem;line-height:1.55;word-break:break-word;white-space:pre-wrap}
 .lbu{align-self:flex-end;background:rgba(0,212,255,.18);border:1px solid rgba(0,212,255,.3);color:var(--text);border-radius:12px 12px 3px 12px}

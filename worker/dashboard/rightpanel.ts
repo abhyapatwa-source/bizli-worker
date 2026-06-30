@@ -1,6 +1,7 @@
 export const RIGHT_PANEL_HTML = `<div id="lab">
   <div id="lab-hdr">
     <span class="lab-title">LAB AGENT</span>
+    <button id="lab-snd-btn" onclick="labToggleSound()" title="Enable ambient sound">&#9675; SND</button>
     <span class="lab-dot"></span>
   </div>
   <div id="lab-body">

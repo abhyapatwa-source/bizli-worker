@@ -390,6 +390,80 @@ function fetchLabQuota(){
     .catch(function(){});
 }
 
+// LAB SOUND ENGINE
+var labAudioCtx=null,labAmbientGain=null,labSoundOn=false;
+function labGetCtx(){
+  if(!labAudioCtx)labAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(labAudioCtx.state==="suspended")labAudioCtx.resume();
+  return labAudioCtx;
+}
+function labStartAmbient(){
+  var ctx=labGetCtx();
+  labAmbientGain=ctx.createGain();
+  labAmbientGain.gain.value=0;
+  labAmbientGain.connect(ctx.destination);
+  // Base drone 55Hz
+  var o1=ctx.createOscillator();o1.type="sine";o1.frequency.value=55;
+  o1.connect(labAmbientGain);o1.start();
+  // Harmonic 110Hz (quieter)
+  var o2=ctx.createOscillator();o2.type="sine";o2.frequency.value=110;
+  var g2=ctx.createGain();g2.gain.value=0.35;
+  o2.connect(g2);g2.connect(labAmbientGain);o2.start();
+  // High shimmer 220Hz (very quiet)
+  var o3=ctx.createOscillator();o3.type="sine";o3.frequency.value=220;
+  var g3=ctx.createGain();g3.gain.value=0.12;
+  o3.connect(g3);g3.connect(labAmbientGain);o3.start();
+  // LFO for slow organic pulse
+  var lfo=ctx.createOscillator();lfo.frequency.value=0.25;
+  var lg=ctx.createGain();lg.gain.value=0.01;
+  lfo.connect(lg);lg.connect(labAmbientGain.gain);lfo.start();
+  // Fade in over 2s
+  labAmbientGain.gain.setTargetAtTime(0.04,ctx.currentTime,1.8);
+}
+function labStopAmbient(){
+  if(!labAmbientGain)return;
+  var g=labAmbientGain;
+  g.gain.setTargetAtTime(0,labAudioCtx.currentTime,0.6);
+  setTimeout(function(){try{g.disconnect();}catch(e){}},3000);
+  labAmbientGain=null;
+}
+function labPlaySend(){
+  if(!labSoundOn)return;
+  var ctx=labGetCtx();
+  var o=ctx.createOscillator(),g=ctx.createGain();
+  o.type="sine";o.frequency.value=900;
+  g.gain.value=0.1;o.connect(g);g.connect(ctx.destination);
+  o.start();
+  g.gain.setTargetAtTime(0,ctx.currentTime+0.01,0.025);
+  o.stop(ctx.currentTime+0.08);
+}
+function labPlayReply(){
+  if(!labSoundOn)return;
+  var ctx=labGetCtx();
+  [440,554,659].forEach(function(freq,i){
+    var o=ctx.createOscillator(),g=ctx.createGain();
+    o.type="sine";o.frequency.value=freq;
+    g.gain.value=0;o.connect(g);g.connect(ctx.destination);
+    var t=ctx.currentTime+i*0.09;
+    o.start(t);
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(0.09,t+0.04);
+    g.gain.setTargetAtTime(0,t+0.06,0.05);
+    o.stop(t+0.2);
+  });
+}
+function labToggleSound(){
+  labSoundOn=!labSoundOn;
+  var btn=document.getElementById("lab-snd-btn");
+  if(labSoundOn){
+    labStartAmbient();
+    if(btn){btn.innerHTML="&#9679; SND";btn.classList.add("snd-on");}
+  }else{
+    labStopAmbient();
+    if(btn){btn.innerHTML="&#9675; SND";btn.classList.remove("snd-on");}
+  }
+  try{localStorage.setItem("bizli_lab_sound",labSoundOn?"1":"0");}catch(e){}
+}
 // LAB AGENT
 var labHistory=[],labBusy=false,LAB_MAX=30,labOldCount=0,labHistoryExpanded=false;
 (function(){
@@ -469,6 +543,7 @@ function labSend(){
   if(!msg)return;
   ta.value="";ta.style.height="auto";
   appendLabBubble("u",msg,true);
+  labPlaySend();
   labHistory.push({role:"user",content:msg});
   if(labHistory.length>LAB_MAX)labHistory=labHistory.slice(-LAB_MAX);
   saveLabHistory();
@@ -483,6 +558,7 @@ function labSend(){
     document.getElementById("lab-proc").style.display="none";
     var reply=data.reply||"No response.";
     var el=appendLabBubble("a","",true);
+    labPlayReply();
     typewriterLab(el,reply,function(){
       labHistory.push({role:"assistant",content:reply});
       if(labHistory.length>LAB_MAX)labHistory=labHistory.slice(-LAB_MAX);
