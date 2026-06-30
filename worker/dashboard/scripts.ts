@@ -67,6 +67,8 @@ function updateOrb(d){
   }
   obrain.textContent=lb?lb.toUpperCase():"GROQ";
   osub.textContent=rk+" / "+(d.groq?d.groq.length:0)+" Groq keys ready";
+  var ostable=document.getElementById("orb-stable");
+  if(ostable){ostable.textContent=errs>=5?"AI CORE STRESSED":"AI CORE STABLE";ostable.style.color=errs>=5?"var(--amber)":"var(--green)";}
 }
 
 function updateBrain(d){
@@ -358,7 +360,7 @@ function startEKG(){
     else if(phase===28){y=h*0.5;}
     else if(phase===30){y=h*0.38;}
     else if(phase===32){y=h*0.5;}
-    else{y=h*0.5+(Math.sin(phase*0.3)*1.5)+(Math.random()*1-0.5);}
+    else{y=h*0.5+(Math.random()*0.5-0.25);}
     ekgData.push(y);
     ctx.clearRect(0,0,w,h);
     ctx.beginPath();

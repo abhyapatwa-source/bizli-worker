@@ -9,15 +9,23 @@ export const RIGHT_PANEL_HTML = `<div id="lab">
   </div>
   <div id="lab-va">
     <div class="lva-title">VISION AI ASSISTANT</div>
-    <div class="lva-desc">Monitoring system vitals, model updates, and tool-chain diagnostics.</div>
-    <div id="lva-orb">
-      <div class="vai-ring vai-r3"></div>
-      <div class="vai-ring vai-r2"></div>
-      <div class="vai-ring vai-r1"></div>
-      <div class="vai-core"></div>
-      <div class="vai-node vai-n1"></div>
-      <div class="vai-node vai-n2"></div>
-      <div class="vai-node vai-n3"></div>
+    <div class="lva-row">
+      <div class="lva-text-col">
+        <div class="lva-desc">Monitoring system vitals, vision model updates, and tool-chain diagnostics.</div>
+      </div>
+      <div class="lva-img-col">
+        <img id="vai-robot-img" src="/bizli-robot.png" alt="AI Entity"
+             onerror="this.style.display='none';var o=document.getElementById('lva-orb');if(o)o.style.display='flex'">
+        <div id="lva-orb">
+          <div class="vai-ring vai-r3"></div>
+          <div class="vai-ring vai-r2"></div>
+          <div class="vai-ring vai-r1"></div>
+          <div class="vai-core"></div>
+          <div class="vai-node vai-n1"></div>
+          <div class="vai-node vai-n2"></div>
+          <div class="vai-node vai-n3"></div>
+        </div>
+      </div>
     </div>
     <div id="lab-quick">
       <div class="lqa" onclick="labQuickAction('Check system health and report all key metrics')">Check system health</div>
