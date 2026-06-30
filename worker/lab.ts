@@ -170,11 +170,18 @@ export async function callLabAgent(
           quotaEvents.push({ keyIndex: ki, model, result: "ok" });
           await recordQuotaEvents(env, quotaEvents);
           try {
-            const parsed = JSON.parse(text.trim());
-            const reply = typeof parsed.reply === "string" ? parsed.reply : text;
+            const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+            const parsed = JSON.parse(cleaned);
+            const reply = typeof parsed.reply === "string" ? parsed.reply : cleaned;
             const importance = typeof parsed.importance === "number" ? parsed.importance : 0.5;
             return { reply: reply.trim(), importance };
           } catch {
+            // Regex fallback — extract reply field even if JSON is malformed
+            const m = text.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+            if (m) {
+              const reply = m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+              return { reply: reply.trim(), importance: 0.5 };
+            }
             return { reply: text.trim(), importance: 0.5 };
           }
         }
