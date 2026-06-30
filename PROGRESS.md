@@ -18,7 +18,7 @@ type worker\brain.ts | findstr BIZLI_VERSION
 
 | Field | Value |
 |---|---|
-| **Deployed version** | v12.1.0 |
+| **Deployed version** | v12.2.0 |
 | **Maintenance mode** | ON (users locked out — turn off before giving access) |
 | **Git** | Ahead of origin/main — push with `! git push origin main` |
 | **Last session** | 2026-06-30 |
@@ -50,6 +50,7 @@ type worker\brain.ts | findstr BIZLI_VERSION
 | v11.98.0 | Fix decommissioned vision model (90b→11b default+candidates); Lab memory error surfacing for diagnostics |
 | v11.99.0 | Remove lab memory debug fields — memory confirmed working (needed Supabase GRANT for service_role) |
 | v12.0.0 | Scalable storage: fix recent_errors corruption (raw put→appendError); lab_memory age pruning in daily cron |
+| v12.2.0 | Lab Agent speed: parallel memory+KV fetch, 2.0-flash first, compact JSON, 18s timeout, trimmed dashboard snapshot |
 | v12.1.0 | **Phase 3: Auto-testing infrastructure** — tests.ts (5-test suite, Gemini scorer, 6h cron gate), Tests tab in dashboard (pass rate gauge, result cards, skeleton loaders), quality alert at <60% pass rate |
 
 ---

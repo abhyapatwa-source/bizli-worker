@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v11.90.0
+### Current version: v12.2.0
 
 ---
 
@@ -180,49 +180,56 @@ dir "C:\Users\bizli\Downloads\index*.ts" /OD
 ## PROJECT TIMELINE
 
 - **Started:** June 25, 2026
-- **Today:** June 28, 2026 (Day 4)
+- **Today:** June 30, 2026 (Day 6)
 - **Target completion:** July 5-7, 2026 (Day 11-13)
-- **Days remaining:** ~7-9
+- **Days remaining:** ~5-7
 
 ---
 
-## PHASE 2 PROGRESS
+## PHASE 2 PROGRESS — COMPLETE
 
-### Deployed
+### All Phase 2 items deployed:
 - ✅ v11.87.0: Gemini separated to Lab-only
 - ✅ v11.88.0: Quota tracking + Brains tab populated
 - ✅ v11.88.1: UX font fixes (39 size bumps)
 - ✅ v11.89.0: Global Health % indicator in topbar
-- ✅ v11.90.0: Groq multi-model rotation (3 models × 16 keys = 48 slots)
+- ✅ v11.90.0: Groq multi-model rotation (16 keys × auto-discovered models)
+- ✅ v11.90.1: 4 critical bug fixes (rotation, movie crash, fallback, Hindi classifier)
+- ✅ v11.91.0: needsLiveSearch → pure sync heuristic (saves 300-800ms/msg)
+- ✅ v11.92.0+v11.93.0: Full auto-model discovery (Groq + Gemini self-healing)
+- ✅ v11.94.0: Models tab, Live Feed tab, Maintenance tab in dashboard
+- ✅ v11.95.0: Brain pipeline visualization (live active-node highlight)
+- ✅ v11.96.0: Skeleton loaders (shimmer placeholders on first data load)
+- ✅ v11.97.0: Lab Agent memory vault (importance-scored Supabase, auto-prune 200 rows)
+- ✅ v12.0.0: Scalable storage — recent_errors corruption fix; lab_memory age pruning
 
-### Remaining Phase 2
-- ⏳ Edit 5B: Real Models tab UI (shows live rotation status)
-- ⏳ Edit 6: Brain Chain pipeline visualization (Overview redesign)
-- ⏳ Edit 8: Real Live Feed tab content (event stream)
-- ⏳ Edit 9: Skeleton loaders during data load
-- ⏳ Edit 10: Lab Agent memory in Supabase (importance-scored vault)
-- ⏳ Edit 11: Maintenance tab + OpenRouter cleanup analyzer
+### Remaining Phase 2 (LOW priority, deferred):
 - ⏳ Edit 12: Morphing Orb upgrade (5-layer animated)
 - ⏳ Edit 13: Sound effects + animations polish
 
 ---
 
-## PHASE 3 (next, after Phase 2)
+## PHASE 3 — AUTO-TESTING (DEPLOYED, partially)
 
-- ⏳ Auto-testing infrastructure (Lab Agent sends test prompts to Bizli)
-- ⏳ Tests tab in dashboard (quality trends, multi-language tests)
-- ⏳ Anomaly detection (proactive alerts when quality drops)
-- ⏳ Cross-session memory + pattern recognition
+- ✅ v12.1.0: tests.ts — 5-test suite, Gemini scorer, 6h cron gate, quality alert at <60%
+- ✅ v12.1.0: Tests tab in dashboard (pass rate gauge, per-test result cards, skeleton loaders)
+- ✅ v12.2.0: Lab Agent speed — parallel fetch, 2.0-flash first, 18s timeout
+- ⏳ **Supabase `test_results` table** — SQL needs to be run to unblock Tests tab data
+- ⏳ Anomaly detection (proactive alerts when quality drops — auto-testing foundation laid)
+- ⏳ Cross-session memory + pattern recognition (future)
 
 ---
 
-## BIZLI'S KNOWN BUGS (real bugs to fix AFTER Lab is done)
+## BIZLI'S KNOWN BUGS (Phase 4 — Lab is ready, fix these now)
 
-User will provide full list when Lab is ready. Already known issues:
+Use Lab Agent's diagnostic power to find root causes before fixing.
+
 - Feminine Hindi grammar sometimes wrong (sakti vs sakta)
-- Time zone handling for non-Indian countries occasionally wrong
-- !agent command list display issue
-- Other bugs the user has identified but not yet detailed
+- Timezone handling for non-Indian countries occasionally wrong
+- !agent command list display issue (minor)
+- autoExtractMemory doubles Groq calls every 4 messages (quota risk at scale)
+- Dead callGemini() in brain.ts (getGeminiKeys("bizli") returns [] — dead code, clean up)
+- 17 dead tool handlers in executeTool() (translate, crypto, recipe, etc.) — delete or promote
 
 **Approach:** Use Lab Agent's diagnostic power to find root causes before fixing.
 
