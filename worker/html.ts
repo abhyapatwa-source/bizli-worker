@@ -53,6 +53,17 @@ ${LEFTNAV_HTML}
       ${LIVEFEED_HTML}
       ${MAINTENANCE_HTML}
       ${TESTS_HTML}
+      <!-- SYSTEM METRICS (overview only) -->
+      <div class="panel" id="metrics-section">
+        <div class="ptitle">SYSTEM METRICS</div>
+        <div id="met-panel">
+          <div class="skel-row"></div>
+          <div class="skel-row" style="max-width:85%"></div>
+          <div class="skel-row" style="max-width:70%"></div>
+          <div class="skel-row" style="max-width:90%"></div>
+        </div>
+        <div id="met-stable" style="font-size:.62rem;color:var(--green);margin-top:10px;text-align:center;letter-spacing:.1em">&#9632; SYSTEM STABLE</div>
+      </div>
     </div>
   </div>
 </div>

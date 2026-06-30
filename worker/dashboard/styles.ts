@@ -225,8 +225,8 @@ body::before{
 .ulast{color:var(--muted);font-size:.65rem;margin-top:3px}
 .odot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);flex-shrink:0;animation:lpulse 1.6s infinite}
 .xdot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
-#tools-section{grid-column:1/3;grid-row:3}
-#tools-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+#tools-section{grid-column:1;grid-row:3}
+#tools-wrap{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:8px}
 .tchip{
   padding:5px 11px;border-radius:20px;font-size:.75rem;letter-spacing:.04em;
   border:1px solid rgba(34,197,94,.3);background:rgba(34,197,94,.07);color:var(--green);
@@ -234,7 +234,38 @@ body::before{
 }
 .tchip.dead{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.07);color:var(--red)}
 .tchip::before{content:"● ";font-size:.62rem;vertical-align:middle}
-#vitals-section{grid-column:3;grid-row:3}
+.ticon-item{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:8px 4px;border-radius:8px;
+  border:1px solid rgba(34,197,94,.25);background:rgba(34,197,94,.05);
+  cursor:default;transition:all .25s;
+}
+.ticon-item:hover{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.5);transform:translateY(-1px)}
+.ticon-item.ticon-dead{border-color:rgba(239,68,68,.2);background:rgba(239,68,68,.04)}
+.ticon-item.ticon-dead:hover{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.4)}
+.ticon-ico{width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--green)}
+.ticon-item.ticon-dead .ticon-ico{color:var(--red)}
+.ticon-ico svg{width:16px;height:16px;stroke-width:1.5}
+.ticon-lbl{font-size:.52rem;letter-spacing:.05em;color:var(--green);text-align:center;opacity:.8}
+.ticon-item.ticon-dead .ticon-lbl{color:var(--red);opacity:.7}
+#vitals-section{grid-column:2;grid-row:3}
+#metrics-section{grid-column:3;grid-row:3;display:none}
+#app.tab-overview #metrics-section{display:block}
+.met-row{display:flex;flex-direction:column;gap:3px;padding:7px 0;border-bottom:1px solid rgba(0,212,255,.06)}
+.met-row:last-child{border-bottom:none}
+.met-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.met-lbl{font-size:.68rem;letter-spacing:.12em;color:var(--muted)}
+.met-val{font-size:.75rem;font-weight:700;color:var(--cyan)}
+.met-track{height:4px;background:rgba(0,212,255,.08);border-radius:2px;overflow:hidden}
+.met-fill{height:100%;border-radius:2px;transition:width .7s ease,background .4s}
+.met-g{background:linear-gradient(90deg,var(--green),#4ade80)}
+.met-b{background:linear-gradient(90deg,var(--blue),var(--cyan))}
+.met-a{background:linear-gradient(90deg,var(--amber),#fbbf24)}
+.met-r{background:linear-gradient(90deg,var(--red),#f87171)}
+#ekg-canvas{vertical-align:middle;margin:0 5px;opacity:.75}
+.h-integrity{font-size:.6rem;letter-spacing:.1em;color:var(--muted);white-space:nowrap}
+@keyframes numflash{0%{opacity:1}40%{opacity:.35;color:#fff}100%{opacity:1}}
+.num-flash{animation:numflash .45s ease}
 .vrow{
   display:flex;justify-content:space-between;align-items:center;
   padding:6px 0;border-bottom:1px solid rgba(0,212,255,.06);font-size:.76rem;
@@ -250,11 +281,12 @@ body::before{
   #orb-section{grid-column:1/3;grid-row:auto;min-height:260px}
   #brain-section,#drive-section,#err-section,#users-section{grid-column:auto;grid-row:auto}
   #tools-section{grid-column:1/3}
-  #vitals-section{grid-column:1/3}
+  #vitals-section{grid-column:1}
+  #metrics-section{grid-column:2}
 }
 @media(max-width:560px){
   .grid{grid-template-columns:1fr}
-  #orb-section,#brain-section,#drive-section,#err-section,#users-section,#tools-section,#vitals-section{grid-column:1}
+  #orb-section,#brain-section,#drive-section,#err-section,#users-section,#tools-section,#vitals-section,#metrics-section{grid-column:1}
   #cat-wrap{width:170px;height:170px}
   #cat-holo{width:96px;height:122px;margin:-61px 0 0 -48px}
   .r1{width:112px;height:112px}.r2{width:138px;height:138px}.r3{width:164px;height:164px}

@@ -6,4 +6,5 @@ export const OVERVIEW_HTML = `<!-- SUMMARY ROW -->
   <div class="sbox"><div class="snum" id="s-mems">&#8212;</div><div class="slbl">MEMORIES</div></div>
   <div class="sbox"><div class="snum" id="s-keys">&#8212;</div><div class="slbl">GROQ LIVE</div></div>
   <div class="sbox"><div class="snum" id="s-tools">&#8212;</div><div class="slbl">TOOLS OK</div></div>
+  <div class="sbox"><div class="snum" id="s-toff" style="color:var(--red)">&#8212;</div><div class="slbl">TOOLS OFF</div></div>
 </div>`;

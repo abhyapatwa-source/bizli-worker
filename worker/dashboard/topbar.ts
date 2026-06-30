@@ -5,6 +5,8 @@ export const TOPBAR_HTML = `<div id="topbar">
     <span class="live-txt">LIVE</span>
   </div>
   <div id="health-pct">
+    <span class="h-integrity">SYSTEM INTEGRITY</span>
+    <canvas id="ekg-canvas" width="80" height="22"></canvas>
     <span class="h-dot"></span>
     <span class="h-num">&#8212;</span>
     <span class="h-lbl">LOADING</span>

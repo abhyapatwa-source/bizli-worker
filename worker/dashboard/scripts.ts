@@ -12,6 +12,7 @@ export const DASHBOARD_SCRIPTS = `try{(function(){
 })();}catch(e){}
 
 var PW="",prevN={},knownDrive=[],started=false,lastD=null,lastQ=null;
+var ekgData=[],ekgColor="#22c55e",ekgRaf=null;
 
 function submitPw(){
   var v=document.getElementById("pw-input").value.trim();
@@ -33,6 +34,8 @@ function secs(s){
 function animN(el,to){
   var from=parseInt(el.textContent.replace("k",""))||0;
   if(from===to)return;
+  el.classList.add("num-flash");
+  setTimeout(function(){el.classList.remove("num-flash");},450);
   var steps=22,st=0,diff=to-from;
   var t=setInterval(function(){
     st++;el.textContent=fmt(Math.round(from+diff*(st/steps)));
@@ -125,26 +128,39 @@ function updateUsers(d){
   var users=d.messages.perUser.slice(0,10);
   var maxc=users[0].count||1;
   var h="";
-  users.forEach(function(u){
+  users.forEach(function(u,i){
     var pct=Math.max(4,Math.round((u.count/maxc)*100));
+    var isTop=i===0;
+    var code="USER-"+(i+1);
     h+="<div class='uitem'>";
-    h+="<div class='utop'><span class='xdot'></span><span>"+esc(u.name)+"</span>";
+    h+="<div class='utop'><span class='"+(isTop?"odot":"xdot")+"'></span>";
+    h+="<span style='color:"+(isTop?"var(--cyan)":"var(--text)")+"'>"+esc(code)+"</span>";
     h+="<span class='umsgs'>"+u.count+" msg</span></div>";
-    h+="<div class='ubar-wrap'><div class='ubar' style='width:"+pct+"%'></div></div>";
-    h+="<div class='ulast'>"+esc(u.lastOnlineIST)+"</div></div>";
+    var barStyle="width:"+pct+"%"+(isTop?";box-shadow:0 0 8px rgba(0,212,255,.5)":"");
+    h+="<div class='ubar-wrap'><div class='ubar' style='"+barStyle+"'></div></div></div>";
   });
   list.innerHTML=h;
 }
 
+var TOOL_ICONS={get_weather:"cloud",get_current_time:"clock",search_web:"search",convert_currency:"dollar-sign",get_movie_info:"film",read_url:"link",save_to_vault:"lock",send_gif:"image",search_youtube:"play-circle",show_map:"map-pin"};
+var TOOL_SHORT={get_weather:"WEATHER",get_current_time:"TIME",search_web:"SEARCH",convert_currency:"CURRENCY",get_movie_info:"MOVIES",read_url:"URL",save_to_vault:"VAULT",send_gif:"GIF",search_youtube:"YOUTUBE",show_map:"MAP"};
 function updateTools(d){
   if(!d.tools)return;
   var wrap=document.getElementById("tools-wrap");
   var h="";
   d.tools.forEach(function(t){
-    h+="<div class='tchip"+(t.keyConfigured?"":" dead")+"'>"+t.name.replace(/_/g," ")+"</div>";
+    var alive=t.keyConfigured;
+    var icon=TOOL_ICONS[t.name]||"tool";
+    var lbl=TOOL_SHORT[t.name]||(t.name.replace(/_/g," ").toUpperCase().slice(0,8));
+    h+="<div class='ticon-item"+(alive?"":" ticon-dead")+"' title='"+(alive?"ONLINE":"OFFLINE")+" &mdash; "+t.name+"'>";
+    h+="<div class='ticon-ico'><i data-lucide='"+icon+"'></i></div>";
+    h+="<div class='ticon-lbl'>"+lbl+"</div></div>";
   });
   wrap.innerHTML=h;
-  setN("s-tools",d.tools.filter(function(t){return t.keyConfigured;}).length);
+  var ok=d.tools.filter(function(t){return t.keyConfigured;}).length;
+  setN("s-tools",ok);
+  setN("s-toff",d.tools.length-ok);
+  try{if(typeof lucide!=="undefined")lucide.createIcons();}catch(e){}
 }
 
 function updateVitals(d){
@@ -222,6 +238,7 @@ function updateHealth(d){
   el.className=cls;
   el.querySelector(".h-num").textContent=pct+"%";
   el.querySelector(".h-lbl").textContent=lbl;
+  ekgColor=cls==="h-green"?"#22c55e":cls==="h-amber"?"#f59e0b":"#ef4444";
 }
 
 function updatePipeline(d){
@@ -317,10 +334,77 @@ function updateTests(d){
   });
   res.innerHTML=h;
 }
-function updateAll(d){
+function startEKG(){
+  var canvas=document.getElementById("ekg-canvas");
+  if(!canvas||!canvas.getContext)return;
+  var ctx=canvas.getContext("2d");
+  var w=canvas.width,h=canvas.height;
+  ekgData=[];
+  for(var i=0;i<w;i++)ekgData.push(h/2);
+  var phase=0;
+  function tick(){
+    ekgData.shift();
+    phase=(phase+1)%70;
+    var y;
+    if(phase===25){y=h*0.2;}
+    else if(phase===26){y=h*0.82;}
+    else if(phase===27){y=h*0.12;}
+    else if(phase===28){y=h*0.5;}
+    else if(phase===30){y=h*0.38;}
+    else if(phase===32){y=h*0.5;}
+    else{y=h*0.5+(Math.sin(phase*0.3)*1.5)+(Math.random()*1-0.5);}
+    ekgData.push(y);
+    ctx.clearRect(0,0,w,h);
+    ctx.beginPath();
+    ctx.strokeStyle=ekgColor;
+    ctx.lineWidth=1.2;
+    ctx.shadowColor=ekgColor;
+    ctx.shadowBlur=4;
+    for(var i=0;i<ekgData.length;i++){
+      if(i===0)ctx.moveTo(i,ekgData[i]);
+      else ctx.lineTo(i,ekgData[i]);
+    }
+    ctx.stroke();
+    ekgRaf=requestAnimationFrame(tick);
+  }
+  if(ekgRaf)cancelAnimationFrame(ekgRaf);
+  tick();
+}
+function metRow(lbl,val,pct,cls){
+  return "<div class='met-row'>"+
+    "<div class='met-hdr'><span class='met-lbl'>"+lbl+"</span><span class='met-val'>"+val+"</span></div>"+
+    "<div class='met-track'><div class='met-fill "+cls+"' style='width:"+pct+"%'></div></div>"+
+  "</div>";
+}
+function updateMetrics(d,fetchMs){
+  var mp=document.getElementById("met-panel");
+  var ms=document.getElementById("met-stable");
+  if(!mp)return;
+  var latPct=Math.min(100,Math.round((fetchMs||0)/5));
+  var latCls=latPct<30?"met-g":latPct<60?"met-b":"met-a";
+  var memCount=d.memory?d.memory.count:0;
+  var memPct=Math.min(100,Math.round(memCount/5));
+  var memCls=memPct<60?"met-g":memPct<80?"met-a":"met-r";
+  var netPct=Math.min(100,Math.round((fetchMs||0)/3));
+  var netCls=netPct<40?"met-g":netPct<70?"met-b":"met-a";
+  var errCount=d.recentErrors?d.recentErrors.length:0;
+  var pressPct=Math.min(100,Math.round(errCount/20*100));
+  var pressCls=pressPct<30?"met-g":pressPct<60?"met-a":"met-r";
+  mp.innerHTML=
+    metRow("CPU LOAD",latPct+"%",latPct,latCls)+
+    metRow("MEMORY",memCount+" entries",memPct,memCls)+
+    metRow("NETWORK",(fetchMs||0)+"ms",netPct,netCls)+
+    metRow("PRESSURE",errCount+" errors",pressPct,pressCls);
+  if(ms){
+    ms.innerHTML=errCount>0?("&#9650; "+errCount+" ERRORS DETECTED"):"&#9632; SYSTEM STABLE";
+    ms.style.color=errCount>0?"var(--red)":"var(--green)";
+  }
+}
+function updateAll(d,fetchMs){
   lastD=d;
   updateHealth(d);updateOrb(d);updateBrain(d);updateDrive(d);updateErrors(d);
   updateUsers(d);updateTools(d);updateVitals(d);updateBrains(d);updateModels(d);updateMaintenance(d);updateLiveFeed(d);updatePipeline(d);updateTests(d);
+  updateMetrics(d,fetchMs||0);
   setN("s-users",d.users?d.users.total:0);
   setN("s-appr",d.users?d.users.approved:0);
   setN("s-msgs",d.messages?d.messages.total:0);
@@ -334,6 +418,7 @@ function updateAll(d){
 
 function fetchStats(first){
   if(!PW)return;
+  var t0=performance&&performance.now?performance.now():Date.now();
   fetch("/admin/stats?key="+encodeURIComponent(PW))
     .then(function(r){
       if(r.status===401){
@@ -344,6 +429,7 @@ function fetchStats(first){
     })
     .then(function(d){
       if(!d)return;
+      var fetchMs=Math.round((performance&&performance.now?performance.now():Date.now())-t0);
       if(first){
         document.getElementById("gate").style.display="none";
         document.getElementById("app").style.display="block";
@@ -351,10 +437,11 @@ function fetchStats(first){
         document.getElementById("leftnav").style.display="flex";
         var lbtn=document.getElementById("lab-btn");if(lbtn)lbtn.style.display="flex";
         fetchLabQuota();
+        startEKG();
         try{if(localStorage.getItem("bizli_lab_collapsed")==="1")setLabState(true,false);}catch(e){}
         try{switchTab(localStorage.getItem("bizli_nav_tab")||"overview");}catch(e){switchTab("overview");}
       }
-      updateAll(d);
+      updateAll(d,fetchMs);
     })
     .catch(function(){
       if(first)document.getElementById("pw-err").textContent="Connection error — retry";
