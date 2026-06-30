@@ -417,8 +417,8 @@ function labStartAmbient(){
   var lfo=ctx.createOscillator();lfo.frequency.value=0.25;
   var lg=ctx.createGain();lg.gain.value=0.01;
   lfo.connect(lg);lg.connect(labAmbientGain.gain);lfo.start();
-  // Fade in over 2s
-  labAmbientGain.gain.setTargetAtTime(0.04,ctx.currentTime,1.8);
+  // Fade in quickly
+  labAmbientGain.gain.setTargetAtTime(0.18,ctx.currentTime,0.5);
 }
 function labStopAmbient(){
   if(!labAmbientGain)return;
@@ -432,10 +432,10 @@ function labPlaySend(){
   var ctx=labGetCtx();
   var o=ctx.createOscillator(),g=ctx.createGain();
   o.type="sine";o.frequency.value=900;
-  g.gain.value=0.1;o.connect(g);g.connect(ctx.destination);
+  g.gain.value=0.35;o.connect(g);g.connect(ctx.destination);
   o.start();
-  g.gain.setTargetAtTime(0,ctx.currentTime+0.01,0.025);
-  o.stop(ctx.currentTime+0.08);
+  g.gain.setTargetAtTime(0,ctx.currentTime+0.02,0.04);
+  o.stop(ctx.currentTime+0.15);
 }
 function labPlayReply(){
   if(!labSoundOn)return;
@@ -444,12 +444,12 @@ function labPlayReply(){
     var o=ctx.createOscillator(),g=ctx.createGain();
     o.type="sine";o.frequency.value=freq;
     g.gain.value=0;o.connect(g);g.connect(ctx.destination);
-    var t=ctx.currentTime+i*0.09;
+    var t=ctx.currentTime+i*0.1;
     o.start(t);
     g.gain.setValueAtTime(0,t);
-    g.gain.linearRampToValueAtTime(0.09,t+0.04);
-    g.gain.setTargetAtTime(0,t+0.06,0.05);
-    o.stop(t+0.2);
+    g.gain.linearRampToValueAtTime(0.3,t+0.04);
+    g.gain.setTargetAtTime(0,t+0.08,0.07);
+    o.stop(t+0.3);
   });
 }
 function labToggleSound(){
