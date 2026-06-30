@@ -390,79 +390,120 @@ function fetchLabQuota(){
     .catch(function(){});
 }
 
-// LAB SOUND ENGINE
-var labAudioCtx=null,labAmbientGain=null,labSoundOn=false;
+// LAB SOUND ENGINE — CYBERPUNK
+var labAudioCtx=null,labMasterGain=null,labVolGain=null,labSoundOn=false,labVolLevel=0;
+var LAB_VOLS=[0,0.12,0.26,0.45];
+var LAB_VLABELS=["&#9675; SND","&#9656; LOW","&#9656;&#9656; MED","&#9656;&#9656;&#9656; HIGH"];
 function labGetCtx(){
   if(!labAudioCtx)labAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
   if(labAudioCtx.state==="suspended")labAudioCtx.resume();
   return labAudioCtx;
 }
+function labMakeNoise(ctx){
+  var sz=ctx.sampleRate*3,buf=ctx.createBuffer(1,sz,ctx.sampleRate),d=buf.getChannelData(0);
+  for(var i=0;i<sz;i++)d[i]=Math.random()*2-1;
+  var src=ctx.createBufferSource();src.buffer=buf;src.loop=true;return src;
+}
+function labMakeSatCurve(){
+  var c=new Float32Array(256);
+  for(var i=0;i<256;i++){var x=(i*2)/256-1;c[i]=x/(1+Math.abs(x*2.5));}
+  return c;
+}
 function labStartAmbient(){
   var ctx=labGetCtx();
-  labAmbientGain=ctx.createGain();
-  labAmbientGain.gain.value=0;
-  labAmbientGain.connect(ctx.destination);
-  // Base drone 55Hz
-  var o1=ctx.createOscillator();o1.type="sine";o1.frequency.value=55;
-  o1.connect(labAmbientGain);o1.start();
-  // Harmonic 110Hz (quieter)
-  var o2=ctx.createOscillator();o2.type="sine";o2.frequency.value=110;
-  var g2=ctx.createGain();g2.gain.value=0.35;
-  o2.connect(g2);g2.connect(labAmbientGain);o2.start();
-  // High shimmer 220Hz (very quiet)
-  var o3=ctx.createOscillator();o3.type="sine";o3.frequency.value=220;
-  var g3=ctx.createGain();g3.gain.value=0.12;
-  o3.connect(g3);g3.connect(labAmbientGain);o3.start();
-  // LFO for slow organic pulse
-  var lfo=ctx.createOscillator();lfo.frequency.value=0.25;
-  var lg=ctx.createGain();lg.gain.value=0.01;
-  lfo.connect(lg);lg.connect(labAmbientGain.gain);lfo.start();
-  // Fade in quickly
-  labAmbientGain.gain.setTargetAtTime(0.18,ctx.currentTime,0.5);
+  // Master chain: volGain → masterGain (fade) → destination
+  labMasterGain=ctx.createGain();labMasterGain.gain.value=0;labMasterGain.connect(ctx.destination);
+  labVolGain=ctx.createGain();labVolGain.gain.value=LAB_VOLS[labVolLevel];labVolGain.connect(labMasterGain);
+  // SUB BASS THROB 40Hz — foundation punch
+  var sub=ctx.createOscillator();sub.type="sine";sub.frequency.value=40;
+  var subG=ctx.createGain();subG.gain.value=1.1;sub.connect(subG);subG.connect(labVolGain);sub.start();
+  // DETUNED INDUSTRIAL SAWTOOTH PAIR (120Hz + 124Hz — beating creates machine feel)
+  var ws=ctx.createWaveShaper();ws.curve=labMakeSatCurve();
+  var saw1=ctx.createOscillator();saw1.type="sawtooth";saw1.frequency.value=120;
+  var saw2=ctx.createOscillator();saw2.type="sawtooth";saw2.frequency.value=124;
+  var sawG=ctx.createGain();sawG.gain.value=0.22;
+  saw1.connect(ws);saw2.connect(ws);ws.connect(sawG);sawG.connect(labVolGain);
+  saw1.start();saw2.start();
+  // HIGH SHIMMER 360Hz (thin metallic layer)
+  var hi=ctx.createOscillator();hi.type="triangle";hi.frequency.value=360;
+  var hiG=ctx.createGain();hiG.gain.value=0.08;hi.connect(hiG);hiG.connect(labVolGain);hi.start();
+  // DIGITAL NOISE (bandpass filtered, slowly swept)
+  var noise=labMakeNoise(ctx);
+  var nf=ctx.createBiquadFilter();nf.type="bandpass";nf.frequency.value=1600;nf.Q.value=1.5;
+  var nG=ctx.createGain();nG.gain.value=0.07;
+  noise.connect(nf);nf.connect(nG);nG.connect(labVolGain);noise.start();
+  // FILTER SWEEP LFO (0.06Hz — eerie slow movement)
+  var fLFO=ctx.createOscillator();fLFO.frequency.value=0.06;
+  var fLG=ctx.createGain();fLG.gain.value=900;
+  fLFO.connect(fLG);fLG.connect(nf.frequency);fLFO.start();
+  // PULSE LFO 0.5Hz — makes everything breathe/throb
+  var pLFO=ctx.createOscillator();pLFO.type="sine";pLFO.frequency.value=0.5;
+  var pLG=ctx.createGain();pLG.gain.value=0.06;
+  pLFO.connect(pLG);pLG.connect(labVolGain.gain);pLFO.start();
+  // Fade in
+  labMasterGain.gain.setTargetAtTime(1,ctx.currentTime,0.4);
 }
 function labStopAmbient(){
-  if(!labAmbientGain)return;
-  var g=labAmbientGain;
-  g.gain.setTargetAtTime(0,labAudioCtx.currentTime,0.6);
-  setTimeout(function(){try{g.disconnect();}catch(e){}},3000);
-  labAmbientGain=null;
+  if(!labMasterGain)return;
+  var g=labMasterGain;
+  g.gain.setTargetAtTime(0,labAudioCtx.currentTime,0.4);
+  setTimeout(function(){try{g.disconnect();}catch(e){}},2500);
+  labMasterGain=null;labVolGain=null;
 }
 function labPlaySend(){
-  if(!labSoundOn)return;
-  var ctx=labGetCtx();
+  if(!labSoundOn||labVolLevel===0)return;
+  var ctx=labGetCtx(),vol=LAB_VOLS[labVolLevel];
+  // Downward frequency sweep — data packet fired
   var o=ctx.createOscillator(),g=ctx.createGain();
-  o.type="sine";o.frequency.value=900;
-  g.gain.value=0.35;o.connect(g);g.connect(ctx.destination);
-  o.start();
-  g.gain.setTargetAtTime(0,ctx.currentTime+0.02,0.04);
-  o.stop(ctx.currentTime+0.15);
+  o.type="square";
+  o.frequency.setValueAtTime(1600,ctx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(280,ctx.currentTime+0.09);
+  g.gain.value=vol*1.4;o.connect(g);g.connect(ctx.destination);
+  o.start();g.gain.setTargetAtTime(0,ctx.currentTime+0.03,0.025);o.stop(ctx.currentTime+0.12);
+  // High confirmation click
+  var o2=ctx.createOscillator(),g2=ctx.createGain();
+  o2.type="sine";o2.frequency.value=2400;g2.gain.value=vol*0.9;
+  o2.connect(g2);g2.connect(ctx.destination);
+  o2.start(ctx.currentTime+0.07);
+  g2.gain.setTargetAtTime(0,ctx.currentTime+0.08,0.012);o2.stop(ctx.currentTime+0.11);
 }
 function labPlayReply(){
-  if(!labSoundOn)return;
-  var ctx=labGetCtx();
-  [440,554,659].forEach(function(freq,i){
+  if(!labSoundOn||labVolLevel===0)return;
+  var ctx=labGetCtx(),vol=LAB_VOLS[labVolLevel];
+  // Ascending sweep — system activating
+  var sw=ctx.createOscillator(),sg=ctx.createGain();
+  sw.type="sawtooth";
+  sw.frequency.setValueAtTime(100,ctx.currentTime);
+  sw.frequency.exponentialRampToValueAtTime(1100,ctx.currentTime+0.14);
+  sg.gain.value=vol*1.2;sw.connect(sg);sg.connect(ctx.destination);
+  sw.start();sg.gain.setTargetAtTime(0,ctx.currentTime+0.08,0.035);sw.stop(ctx.currentTime+0.18);
+  // Lock-in chord: root + fifth (A4 + E5)
+  [440,659].forEach(function(f,i){
     var o=ctx.createOscillator(),g=ctx.createGain();
-    o.type="sine";o.frequency.value=freq;
-    g.gain.value=0;o.connect(g);g.connect(ctx.destination);
-    var t=ctx.currentTime+i*0.1;
+    o.type="sine";o.frequency.value=f;g.gain.value=0;
+    o.connect(g);g.connect(ctx.destination);
+    var t=ctx.currentTime+0.17;
     o.start(t);
-    g.gain.setValueAtTime(0,t);
-    g.gain.linearRampToValueAtTime(0.3,t+0.04);
-    g.gain.setTargetAtTime(0,t+0.08,0.07);
-    o.stop(t+0.3);
+    g.gain.setValueAtTime(vol*1.1,t);
+    g.gain.setTargetAtTime(0,t+0.06,0.12);
+    o.stop(t+0.7);
   });
 }
-function labToggleSound(){
-  labSoundOn=!labSoundOn;
+function labCycleVolume(){
+  labVolLevel=(labVolLevel+1)%4;
+  labSoundOn=labVolLevel>0;
   var btn=document.getElementById("lab-snd-btn");
+  if(btn){
+    btn.innerHTML=LAB_VLABELS[labVolLevel];
+    if(labSoundOn)btn.classList.add("snd-on");else btn.classList.remove("snd-on");
+  }
   if(labSoundOn){
-    labStartAmbient();
-    if(btn){btn.innerHTML="&#9679; SND";btn.classList.add("snd-on");}
+    if(!labMasterGain){labStartAmbient();}
+    else if(labVolGain){labVolGain.gain.setTargetAtTime(LAB_VOLS[labVolLevel],labAudioCtx.currentTime,0.3);}
   }else{
     labStopAmbient();
-    if(btn){btn.innerHTML="&#9675; SND";btn.classList.remove("snd-on");}
   }
-  try{localStorage.setItem("bizli_lab_sound",labSoundOn?"1":"0");}catch(e){}
+  try{localStorage.setItem("bizli_lab_vol",String(labVolLevel));}catch(e){}
 }
 // LAB AGENT
 var labHistory=[],labBusy=false,LAB_MAX=30,labOldCount=0,labHistoryExpanded=false;
