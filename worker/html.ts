@@ -16,6 +16,7 @@ import { MODELS_HTML } from './dashboard/tabs/models';
 import { LIVEFEED_HTML } from './dashboard/tabs/livefeed';
 import { MAINTENANCE_HTML } from './dashboard/tabs/maintenance';
 import { TESTS_HTML } from './dashboard/tabs/tests';
+import { SETTINGS_HTML } from './dashboard/tabs/settings';
 
 export const PRIVACY_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy Policy — Bizli AI</title><style>body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:40px 20px;background:#0a0a0f;color:#e8e8f0}h1{color:#a89cf7}h2{color:#7c6af7;margin-top:32px}p,li{line-height:1.8;color:#c8c8d8}a{color:#a89cf7}footer{margin-top:60px;color:#6b6b88;text-align:center}</style></head><body><h1>Privacy Policy — Bizli AI</h1><p><em>Last updated: June 2026</em></p><h2>1. Introduction</h2><p>Bizli AI is a personal AI companion built by Abhya using advanced AI research, Meta tools, and open-source resources. This policy explains how we handle your data.</p><h2>2. What We Collect</h2><ul><li>Display name and Gmail (for account recovery)</li><li>Platform identifiers (Telegram ID, Facebook ID)</li><li>Conversation history (last 30 messages)</li><li>Memories extracted from conversations</li><li>A hashed PIN (never stored in plain text)</li></ul><h2>3. How We Use It</h2><ul><li>To provide personalized AI companion experience</li><li>To remember context across conversations and platforms</li><li>For account verification and recovery</li></ul><h2>4. Data Storage</h2><p>Data is stored securely using Supabase (PostgreSQL) and Cloudflare Workers KV with encryption at rest.</p><h2>5. Your Rights</h2><p>You can delete your data anytime using !forget all and !wipememory commands, or by contacting bizlibix@gmail.com.</p><h2>6. Third-Party Services</h2><p>We use Groq (AI inference), Supabase (database), Cloudflare (hosting), Telegram and Meta APIs (messaging platforms).</p><h2>7. Contact</h2><p>Email: bizlibix@gmail.com | Bot: @BizliAI_bot</p><footer>Built with love by Abhya | Bizli AI 2026</footer></body></html>`;
 
@@ -53,6 +54,7 @@ ${LEFTNAV_HTML}
       ${LIVEFEED_HTML}
       ${MAINTENANCE_HTML}
       ${TESTS_HTML}
+      ${SETTINGS_HTML}
       <!-- SYSTEM METRICS (overview only) -->
       <div class="panel" id="metrics-section">
         <div class="ptitle">SYSTEM METRICS</div>
