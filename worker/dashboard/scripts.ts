@@ -55,12 +55,12 @@ function updateOrb(d){
   var errs=d.recentErrors?d.recentErrors.length:0;
   var lb=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain.toLowerCase():"groq";
   var rk=d.groq?d.groq.filter(function(k){return k.status==="ready";}).length:0;
-  orb.className="";
+  orb.classList.remove("red","amber");
   if(errs>=5){
-    orb.className="red";
+    orb.classList.add("red");
     ost.textContent="⚠ ERROR SPIKE";ost.style.color="var(--red)";
   }else if(lb&&lb!=="groq"){
-    orb.className="amber";
+    orb.classList.add("amber");
     ost.textContent="◉ FALLBACK ACTIVE";ost.style.color="var(--amber)";
   }else{
     ost.textContent="◉ CORE SYSTEM";ost.style.color="var(--blue)";
@@ -755,45 +755,14 @@ try{
 }catch(e){}
 try{if(typeof lucide!=="undefined")lucide.createIcons();}catch(e){}
 
-// Animated cat
+// Holographic Bizli — click for bounce + chirp (blink/butterfly are CSS-driven)
 function initCat(){
   var holoEl=document.getElementById("cat-holo");
-  var svg=document.getElementById("biz-cat");
-  if(!svg||!holoEl)return;
-  var pl=document.getElementById("pupil-left"),pr=document.getElementById("pupil-right");
-  var sl=document.getElementById("shine-left"),sr=document.getElementById("shine-right");
-  document.addEventListener("mousemove",function(e){
-    if(!pl||!pr)return;
-    var rect=holoEl.getBoundingClientRect();
-    var cx=rect.left+rect.width*0.5,cy=rect.top+rect.height*0.41;
-    var dx=e.clientX-cx,dy=e.clientY-cy;
-    var dist=Math.sqrt(dx*dx+dy*dy)||1;
-    var max=4,s=Math.min(dist/200,1)*max;
-    var ox=(dx/dist)*s,oy=(dy/dist)*s;
-    pl.setAttribute("transform","translate("+ox+","+oy+")");
-    pr.setAttribute("transform","translate("+ox+","+oy+")");
-    if(sl)sl.setAttribute("transform","translate("+ox+","+oy+")");
-    if(sr)sr.setAttribute("transform","translate("+ox+","+oy+")");
-  });
-  function blink(){
-    var el=document.getElementById("eye-l-grp"),er=document.getElementById("eye-r-grp");
-    if(el&&er){
-      el.style.transform="scaleY(0.07)";er.style.transform="scaleY(0.07)";
-      setTimeout(function(){if(el)el.style.transform="";if(er)er.style.transform="";},120);
-    }
-    setTimeout(blink,2800+Math.random()*4500);
-  }
-  setTimeout(blink,1800+Math.random()*2000);
-  function twitch(){
-    var id=Math.random()>0.5?"ear-l-grp":"ear-r-grp";
-    var eg=document.getElementById(id);
-    if(eg){eg.classList.add("twitching");setTimeout(function(){if(eg)eg.classList.remove("twitching");},560);}
-    setTimeout(twitch,6000+Math.random()*9000);
-  }
-  setTimeout(twitch,3500+Math.random()*3000);
-  svg.addEventListener("click",function(){
-    svg.classList.add("bounce");
-    setTimeout(function(){svg.classList.remove("bounce");},380);
+  if(!holoEl)return;
+  var img=document.getElementById("biz-cat-img");
+  holoEl.addEventListener("click",function(){
+    if(img)img.classList.add("bounce");
+    setTimeout(function(){if(img)img.classList.remove("bounce");},380);
     try{
       var ctx=new(window.AudioContext||window.webkitAudioContext)();
       var o=ctx.createOscillator(),g=ctx.createGain();
@@ -808,16 +777,5 @@ function initCat(){
       o.start(ctx.currentTime);o.stop(ctx.currentTime+0.3);
     }catch(ex){}
   });
-  function glitch(){
-    var g1=document.getElementById("glitch-1"),g2=document.getElementById("glitch-2");
-    if(g1&&g2){
-      g1.setAttribute("y",String(18+Math.random()*205));
-      g2.setAttribute("y",String(18+Math.random()*205));
-      g1.setAttribute("opacity","0.75");g2.setAttribute("opacity","0.55");
-      setTimeout(function(){if(g1)g1.setAttribute("opacity","0");if(g2)g2.setAttribute("opacity","0");},70+Math.random()*60);
-    }
-    setTimeout(glitch,4500+Math.random()*9000);
-  }
-  setTimeout(glitch,2500);
 }
 try{initCat();}catch(e){}`;

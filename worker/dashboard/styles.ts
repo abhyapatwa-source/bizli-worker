@@ -97,36 +97,44 @@ body::before{
 #orb-section{
   grid-column:1;grid-row:1/3;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:20px 12px;min-height:420px;position:relative;
+  padding:8px 4px;min-height:420px;position:relative;
 }
 .ni-hdr{position:absolute;top:14px;left:15px;z-index:3}
-.ni-title{font-size:.72rem;letter-spacing:.22em;color:var(--blue);font-weight:700;text-shadow:0 0 8px rgba(0,212,255,.4)}
-.ni-sub{font-size:.6rem;letter-spacing:.12em;color:var(--cyan);margin-top:3px;opacity:.75}
+.ni-title{font-size:.9rem;letter-spacing:.22em;color:var(--blue);font-weight:700;text-shadow:0 0 8px rgba(0,212,255,.4)}
+.ni-sub{font-size:.72rem;letter-spacing:.12em;color:var(--cyan);margin-top:3px;opacity:.75}
 .ni-corner{position:absolute;width:13px;height:13px;border-style:solid;border-color:rgba(0,212,255,.55);z-index:3}
 .ni-tl{top:10px;left:10px;border-width:1.5px 0 0 1.5px}
 .ni-tr{top:10px;right:10px;border-width:1.5px 1.5px 0 0}
-#cat-wrap{position:relative;width:280px;height:280px;flex-shrink:0}
+#cat-wrap{position:relative;width:100%;aspect-ratio:1130/1392;margin:0 auto;flex-shrink:0}
 #cat-holo{
-  position:absolute;top:50%;left:50%;
-  width:188px;height:240px;margin:-120px 0 0 -94px;
-  border-radius:10px;overflow:hidden;
-  border:1.5px solid rgba(0,212,255,.8);
-  box-shadow:0 0 22px rgba(0,212,255,.9),0 0 44px rgba(0,212,255,.4),0 0 80px rgba(0,212,255,.15),inset 0 0 14px rgba(0,212,255,.12);
-  animation:catbreathe 4.2s ease-in-out infinite;
-  transition:box-shadow 1.2s ease,border-color 1.2s ease;
+  position:absolute;inset:0;
+  border-radius:12px;overflow:hidden;
+  box-shadow:0 0 34px rgba(0,212,255,.20),inset 0 0 24px rgba(0,212,255,.10);
+  animation:catbreathe 6s ease-in-out infinite;
+  transition:box-shadow 1.2s ease;
+  cursor:pointer;
 }
-@keyframes catbreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.022)}}
-#cat-holo.amber{
-  border-color:rgba(245,158,11,.85);
-  box-shadow:0 0 22px rgba(245,158,11,.9),0 0 44px rgba(245,158,11,.4),0 0 80px rgba(245,158,11,.15),inset 0 0 14px rgba(245,158,11,.12);
+@keyframes catbreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.012)}}
+#cat-holo.amber{box-shadow:0 0 40px rgba(245,158,11,.30),inset 0 0 24px rgba(245,158,11,.12)}
+#cat-holo.red{box-shadow:0 0 40px rgba(239,68,68,.32),inset 0 0 24px rgba(239,68,68,.12)}
+@keyframes catbounce{0%{transform:scale(1)}40%{transform:scale(1.05)}100%{transform:scale(1)}}
+/* Holographic image — fills the box */
+#biz-cat-img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;display:block;cursor:pointer;
+  transition:transform .35s ease;
 }
-#cat-holo.red{
-  border-color:rgba(239,68,68,.85);
-  box-shadow:0 0 22px rgba(239,68,68,.9),0 0 44px rgba(239,68,68,.4),0 0 80px rgba(239,68,68,.15),inset 0 0 14px rgba(239,68,68,.12);
+#biz-cat-img.bounce{animation:catbounce .35s ease}
+/* Blink — briefly dims her glowing eyes (positions may need nudging to the image) */
+.eyelid{
+  position:absolute;pointer-events:none;opacity:0;z-index:2;
+  border-radius:50% 50% 46% 46%;filter:blur(2px);
+  background:radial-gradient(ellipse at center,rgba(24,44,80,.92) 50%,rgba(24,44,80,0) 100%);
+  animation:eyeblink 7.2s ease-in-out infinite;
 }
-#biz-cat{width:100%;height:100%;display:block;transition:transform .3s ease,filter .3s ease}
-#biz-cat.bounce{animation:catbounce .35s ease}
-@keyframes catbounce{0%{transform:scale(1)}40%{transform:scale(1.07)}100%{transform:scale(1)}}
+.eyelid.el{left:35.5%;top:26%;width:11%;height:6.5%}
+.eyelid.er{left:49%;top:26%;width:11%;height:6.5%}
+@keyframes eyeblink{0%,90%,100%{opacity:0}93.5%,95.5%{opacity:.92}}
 #cat-scan-svg{animation:svgscan 3.5s linear infinite}
 @keyframes svgscan{0%{transform:translateY(-8px)}100%{transform:translateY(248px)}}
 #tail-grp{transform-origin:148px 175px;animation:tailswish 3.2s ease-in-out infinite}
@@ -150,6 +158,26 @@ body::before{
 }
 @keyframes catscan{0%{top:-35%}100%{top:100%}}
 @keyframes catglare{0%,100%{opacity:.25}50%{opacity:.75}}
+/* Holographic butterfly — drifts through Bizli's realm on its own path */
+.holo-butterfly{
+  position:absolute;top:0;left:0;z-index:6;pointer-events:none;opacity:0;
+  filter:drop-shadow(0 0 5px rgba(0,212,255,.85));
+  animation:butterflyDrift 18s ease-in-out infinite;
+}
+.bf-wing{transform-box:fill-box;animation:bfFlutter .32s ease-in-out infinite}
+.bf-wl{transform-origin:right center}
+.bf-wr{transform-origin:left center}
+@keyframes bfFlutter{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.42)}}
+@keyframes butterflyDrift{
+  0%{opacity:0;transform:translate(24px,244px) rotate(-8deg)}
+  9%{opacity:1}
+  26%{transform:translate(186px,118px) rotate(12deg)}
+  44%{transform:translate(58px,64px) rotate(-7deg)}
+  60%{transform:translate(214px,28px) rotate(10deg)}
+  78%{transform:translate(120px,150px) rotate(-10deg)}
+  90%{opacity:1}
+  100%{opacity:0;transform:translate(252px,-24px) rotate(6deg)}
+}
 .ring{
   position:absolute;top:50%;left:50%;border-radius:50%;
   border:1px solid rgba(0,212,255,.28);
@@ -180,10 +208,10 @@ body::before{
 @keyframes ob1{from{transform:rotate(0deg) translateX(72px)}to{transform:rotate(360deg) translateX(72px)}}
 @keyframes ob2{from{transform:rotate(0deg) translateX(88px)}to{transform:rotate(360deg) translateX(88px)}}
 @keyframes ob3{from{transform:rotate(0deg) translateX(104px)}to{transform:rotate(360deg) translateX(104px)}}
-#orb-info{margin-top:22px;text-align:center}
-#orb-status{font-size:.75rem;letter-spacing:.26em;color:var(--blue);margin-bottom:5px}
-#orb-brain{font-size:1.05rem;letter-spacing:.12em;font-weight:700}
-#orb-sub{font-size:.75rem;color:var(--muted);margin-top:5px}
+#orb-info{margin-top:14px;text-align:center}
+#orb-status{font-size:.92rem;letter-spacing:.26em;color:var(--blue);margin-bottom:6px}
+#orb-brain{font-size:1.5rem;letter-spacing:.12em;font-weight:700}
+#orb-sub{font-size:.9rem;color:var(--muted);margin-top:6px}
 #brain-section{grid-column:2;grid-row:1}
 .kgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .kdot{
@@ -309,8 +337,7 @@ body::before{
 @media(max-width:560px){
   .grid{grid-template-columns:1fr}
   #orb-section,#brain-section,#drive-section,#err-section,#users-section,#tools-section,#vitals-section,#metrics-section{grid-column:1}
-  #cat-wrap{width:200px;height:200px}
-  #cat-holo{width:120px;height:152px;margin:-76px 0 0 -60px}
+  #cat-wrap{max-width:230px}
   .r1{width:152px;height:152px}.r2{width:184px;height:184px}.r3{width:212px;height:212px}
 }
 #lab{
@@ -587,8 +614,8 @@ body::before{
 /* Page footer */
 #page-footer{text-align:center;padding:12px 0 6px;font-size:.58rem;letter-spacing:.2em;color:var(--muted);border-top:1px solid rgba(0,212,255,.06);margin-top:10px}
 /* Neural Interface status section */
-.ni-status-label{font-size:.52rem;letter-spacing:.24em;color:var(--muted);margin-bottom:2px;text-transform:uppercase}
-#orb-stable{font-size:.68rem;letter-spacing:.16em;color:var(--green);margin-top:5px;text-shadow:0 0 8px rgba(34,197,94,.45);transition:color .5s}
+.ni-status-label{font-size:.66rem;letter-spacing:.24em;color:var(--muted);margin-bottom:3px;text-transform:uppercase}
+#orb-stable{font-size:.86rem;letter-spacing:.16em;color:var(--green);margin-top:6px;text-shadow:0 0 8px rgba(34,197,94,.45);transition:color .5s}
 /* Topbar lab indicator */
 #t-lab-status{text-align:right;flex-shrink:0;line-height:1.3}
 .t-lab-name{font-size:.68rem;letter-spacing:.2em;color:var(--blue);font-weight:700}

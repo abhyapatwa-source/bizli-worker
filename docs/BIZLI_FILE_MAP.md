@@ -2,7 +2,7 @@
 
 > Complete categorization of every file in `worker/`, grouped into 8 categories.
 > Each file lists its purpose and its main exported functions ("mini-files").
-> **Version:** v12.13.0 · **Total:** 42 `.ts` files (41 active + 1 dead backup)
+> **Version:** v12.13.0 · **Total:** 41 `.ts` files in `worker/` (all active; dead `core/` + backup removed)
 > This is a *map*, not a refactor — nothing here has moved. Read-only reference.
 
 ---
@@ -15,7 +15,7 @@ CATEGORY  (the 8 top groups)
        └─ exportedFunction()   (the "mini-files")
 ```
 
-8 categories · 42 files · ~180 named functions. 8 files are over 500 lines (flagged ⚠️).
+8 categories · 41 files · ~180 named functions. 8 files are over 500 lines (flagged ⚠️).
 
 ---
 
@@ -184,13 +184,20 @@ The monitoring room. **Full feature-level breakdown lives in `MONITORING_ROOM_IN
 
 ---
 
-## CLEANUP / DEAD CODE (flagged, NOT deleted)
+## CLEANUP / DEAD CODE
 
-These are safe-to-remove items. Listed here for a future cleanup pass — do **not** touch without a separate approved plan.
+### ✅ Removed (cleanup commit, this session — 7,579 lines deleted)
+| Item | What it was |
+|------|-------------|
+| ~~`core/gemini.ts`~~ | v9.0.0 relic — old Gemini-**primary** brain (contradicted "Gemini = Lab-only"). Not imported. |
+| ~~`core/memory.ts`~~ | v9.0.0 relic — old Supabase layer, superseded by `worker/memory.ts`. Not imported. |
+| ~~`core/persona.txt`~~ | v9.0.0 relic — old "flirty Snapchat" persona (opposite of today's warm/genuine Bizli). |
+| ~~`main`~~ | 0-byte empty junk file at repo root. |
+| ~~`worker/index_BACKUP_v11.80.2.ts`~~ | 7,116-line pre-modularization monolith backup. Never imported. |
 
-| Item | Where | Why it's dead |
+### ⏳ Still flagged (not yet touched — needs a separate plan)
+| Item | Where | Why it's dead / risky |
 |------|-------|---------------|
-| `index_BACKUP_v11.80.2.ts` | repo root | 7,116-line pre-modularization monolith backup. Never imported. Safe to delete. |
 | `callGemini()` in Bizli's chain | `brain.ts` | `getGeminiKeys("bizli")` returns `[]` → never fires for chat. Gemini is Lab-only by design. |
 | **17 dead tool handlers** | `tools.ts` `executeTool()` | Cases exist but are NOT in `BIZLI_TOOLS`, so the LLM can never call them |
 | `autoExtractMemory()` double-call | `brain.ts` | Doubles Groq calls every 4 messages — quota risk at scale (not dead, but flagged debt) |
@@ -205,7 +212,7 @@ These are safe-to-remove items. Listed here for a future cleanup pass — do **n
 ## AT-A-GLANCE COUNTS
 
 - **8** categories
-- **42** files (41 active, 1 dead backup)
+- **41** files (all active — dead `core/` folder, `main`, and 7,116-line backup removed this session)
 - **~180** named exported functions/constants
 - **8** files over 500 lines: `brain.ts` (881), `commands.ts` (872), `scripts.ts` (823), `styles.ts` (604), `admin.ts` (591), `apis.ts` (521), `html.ts` (405), `tools.ts` (400)
 - **10** live tools, **17** dead tool handlers
