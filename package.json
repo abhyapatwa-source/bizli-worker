@@ -1,0 +1,1 @@
+{"name":"bizli-v9","version":"9.0.0","private":true,"scripts":{"deploy":"wrangler deploy","dev":"wrangler dev"},"devDependencies":{"@cloudflare/workers-types":"^4.0.0","typescript":"^5.0.0","wrangler":"^4.97.0"}}
