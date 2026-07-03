@@ -1,9 +1,9 @@
 import type { Env } from './types';
 import { db } from './db';
-import { getGroqKeys, getGeminiKeys } from './utils';
+import { getGroqKeys, getGeminiKeys, getCerebrasKeys, getOpenRouterKeys } from './utils';
 import { sendTelegram, editTelegramMessage, broadcastToTelegram, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAdminSession, lookupUser, setAuthStateHelper, getUserMemories } from './memory';
-import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, probeGroqModels, probeGeminiModels } from './brain';
+import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, getActiveCerebrasModels, getActiveOpenRouterModels, probeAllProviders } from './brain';
 import { BIZLI_TOOLS } from './tools';
 import { runAgents } from './agents';
 
@@ -264,14 +264,20 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       const mins = Math.ceil((cd - now) / 60000);
       return `  ${keyNames[i] || i}: ⏳ cooldown (${mins}m)`;
     }).join("\n");
-    const geminiKeyCount = getGeminiKeys(env).length;
+    const geminiKeyCount = getGeminiKeys(env, "lab").length;
+    const cerebrasKeyCount = getCerebrasKeys(env).length;
+    const openrouterKeyCount = getOpenRouterKeys(env).length;
     const brainMap =
       `🧠 Bizli Brain Map — ${BIZLI_VERSION}\n\n` +
       `🧠 Cerebral Cortex — Groq (${readyKeys}/${keys.length} neurons ready):\n${keyStatus}\n\n` +
-      `🧠 Temporal Lobe — Gemini: ${geminiKeyCount} key${geminiKeyCount !== 1 ? "s" : ""} configured\n` +
-      `   (activates when all Groq neurons exhausted — search + vision capable)\n` +
+      `⚡ Motor Cortex — Cerebras: ${cerebrasKeyCount} key${cerebrasKeyCount !== 1 ? "s" : ""} configured\n` +
+      `   (fallback #1 when Groq exhausted — auto-discovered models)\n` +
+      `🌐 Parietal Lobe — OpenRouter: ${openrouterKeyCount} key${openrouterKeyCount !== 1 ? "s" : ""} configured\n` +
+      `   (fallback #2 — auto-refreshing free-model pool)\n` +
       `🫀 Brainstem — Worker AI: standby\n` +
-      `   (last resort when Groq + Gemini both exhausted — chat only)\n\n` +
+      `   (last resort when all providers exhausted — chat only)\n` +
+      `🧬 Temporal Lobe — Gemini: ${geminiKeyCount} key${geminiKeyCount !== 1 ? "s" : ""} configured\n` +
+      `   (Lab diagnostics only — never handles chat)\n\n` +
       `💾 Hippocampus: ${mems?.[0]?.count || 0} memories stored\n` +
       `💛 Amygdala: persona active\n` +
       `👥 Users: ${allUsers?.[0]?.count || 0} · Approved: ${approved?.[0]?.count || 0} · Waitlist: ${waitlist?.[0]?.count || 0}\n` +
@@ -375,6 +381,8 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     const checkedAt = lastCheck ? new Date(parseInt(lastCheck)).toUTCString() : "never";
     const gemRaw = await env.BIZLI_MEMORY.get("gemini_live_models").catch(() => null);
     const gemModels: string[] = gemRaw ? JSON.parse(gemRaw) : ["gemini-3.5-flash", "gemini-2.5-flash"];
+    const cerModels = await getActiveCerebrasModels(env);
+    const orModels = await getActiveOpenRouterModels(env);
     const lines = [
       `🧠 Active Models — ${BIZLI_VERSION}`,
       ``,
@@ -382,6 +390,12 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       ...text.map((m, i) => `  ${i + 1}. ${m.id}`),
       ``,
       `Groq Vision: ${vision}`,
+      ``,
+      `Cerebras (${cerModels.length}):`,
+      ...cerModels.map((m: string, i: number) => `  ${i + 1}. ${m}`),
+      ``,
+      `OpenRouter free pool (${orModels.length}):`,
+      ...orModels.map((m: string, i: number) => `  ${i + 1}. ${m}`),
       ``,
       `Gemini Lab (${gemModels.length}/3):`,
       ...gemModels.map((m: string, i: number) => `  ${i + 1}. ${m}`),
@@ -391,23 +405,26 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     ];
     await out(lines.join("\n"), false);
   } else if (agentCmd === "refresh models") {
-    await out("🔍 Probing Groq + Gemini model pools — ~20s...", false);
-    const [{ text, vision, changed: groqChanged }, { models: gemModels, changed: gemChanged }] = await Promise.all([
-      probeGroqModels(env),
-      probeGeminiModels(env),
-    ]);
+    await out("🔍 Probing all provider model pools — ~20s...", false);
+    const { groq, gemini, cerebras, openrouter } = await probeAllProviders(env);
     const lines = [
       `✅ Probe complete`,
       ``,
-      `Groq Text (${text.length}/4):`,
-      ...text.map((id, i) => `  ${i + 1}. ${id}`),
+      `Groq Text (${groq.text.length}/4):`,
+      ...groq.text.map((id, i) => `  ${i + 1}. ${id}`),
       ``,
-      `Groq Vision: ${vision}`,
+      `Groq Vision: ${groq.vision}`,
       ``,
-      `Gemini Lab (${gemModels.length}/3):`,
-      ...gemModels.map((m: string, i: number) => `  ${i + 1}. ${m}`),
+      `Cerebras (${cerebras.models.length}):`,
+      ...cerebras.models.map((m: string, i: number) => `  ${i + 1}. ${m}`),
       ``,
-      groqChanged || gemChanged ? `⚡ Model lists updated in KV.` : `No change from previous lists.`,
+      `OpenRouter free pool (${openrouter.models.length}):`,
+      ...openrouter.models.map((m: string, i: number) => `  ${i + 1}. ${m}`),
+      ``,
+      `Gemini Lab (${gemini.models.length}/3):`,
+      ...gemini.models.map((m: string, i: number) => `  ${i + 1}. ${m}`),
+      ``,
+      groq.changed || gemini.changed || cerebras.changed || openrouter.changed ? `⚡ Model lists updated in KV.` : `No change from previous lists.`,
     ];
     await out(lines.join("\n"), false);
   } else {
@@ -425,7 +442,9 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       "!agent clear cache — reset all caches\n" +
       "!agent clear history <user_id> — clear chat\n" +
       "!agent clear session <chat_id> — clear auth\n" +
-      "!agent tools — list all tools",
+      "!agent tools — list all tools\n" +
+      "!agent feedback — 👍/👎 + text feedback summary\n" +
+      "!agent broadcast test — check agent responsiveness",
       false);
   }
 }

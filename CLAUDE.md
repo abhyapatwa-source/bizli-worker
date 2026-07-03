@@ -42,32 +42,35 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.2.0
+### Current version: v12.30.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ---
 
 ## ARCHITECTURE
 
-### Bizli's chat brain chain (in order)
-1. **Groq** (primary): 16 keys × 3 tool-capable models = 48 attempts
-   - llama-3.3-70b-versatile (primary)
-   - llama-4-maverick-17b-128e-instruct (fallback)
-   - llama-4-scout-17b-16e-instruct (third)
-2. **OpenRouter** (fallback): meta-llama/llama-3.1-8b-instruct:free
-3. **Cloudflare Worker AI** (last resort): @cf/meta/llama-3.1-8b-instruct
+### Bizli's chat brain chain (in order) — ALL self-healing since v12.29.0
+1. **Groq** (primary): up to 21 keys (GROQ_API_KEY_1..21) × auto-discovered models
+   - Models auto-probed from GROQ_CANDIDATE_POOL, cached in KV `groq_live_models`
+   - Current lead: openai/gpt-oss-120b → gpt-oss-20b (changes automatically)
+2. **Cerebras** (fallback #1): 5 keys (CEREBRAS_API_KEY_1..5) × auto-discovered models
+   - Lead: gemma-4-31b (direct-answer); gpt-oss-120b/zai-glm-4.7 are reasoning models (secondary)
+3. **OpenRouter** (fallback #2): auto-fetched `:free` model pool, key rotation ready
+4. **Cloudflare Worker AI** (last resort): @cf/meta/llama-3.1-8b-instruct
+
+`probeAllProviders()` (brain.ts) re-probes ALL providers on the 12h cron — dead
+models auto-drop, new ones auto-adopt. No code edits needed to stay current.
 
 ### Lab Agent (separate diagnostic AI)
-- **Gemini** only, 4 keys × 3 models = 12 attempts
-- gemini-2.5-flash → gemini-2.0-flash → gemini-1.5-flash
+- **Gemini** only, 5 keys, models auto-discovered (KV `gemini_live_models`)
 - Bizli's chat **never** touches Gemini (architectural separation since v11.87.0)
+- Gemini Lab keys ALSO power memory embeddings (`getEmbedding` uses "lab" scope)
 
 ### Vision (image input)
-- Locked to llama-4-scout-17b-16e-instruct
-- No rotation
+- Auto-probed from GROQ_VISION_CANDIDATES (KV-cached); llama-3.2 vision family
 
 ### Memory extraction
-- Uses llama-3.1-8b-instant via callGroqJSON
-- Separate path, leave alone
+- `autoExtractMemory` → Cerebras-first (callCerebrasJSON), Groq fallback (callGroqJSON)
+- Runs every 4th message; no longer competes with chat for Groq quota
 
 ---
 
@@ -105,15 +108,15 @@ worker/
       maintenance.ts             ← empty (Phase 2 to populate)
 ```
 
-### Files to DELETE eventually
-- `worker/index_BACKUP_v11.80.2.ts` — 7,116-line backup, never imported, safe to remove
+(Backup file `index_BACKUP_v11.80.2.ts` already deleted — repo is clean of dead files as of v12.29.2.)
 
 ---
 
 ## SECRETS (Cloudflare Workers)
 
-- 16 Groq keys: GROQ_API_KEY_1 through _16
-- 4 Gemini keys: GEMINI_API_KEY, _2, _3, _4
+- Groq keys: GROQ_API_KEY_1 through _21 (code reads whatever exists)
+- 5 Cerebras keys: CEREBRAS_API_KEY_1 through _5 (added v12.29.x)
+- 5 Gemini keys: GEMINI_API_KEY, _2, _3, _4, _5 (Lab + embeddings only)
 - 5 Tavily keys: TAVILY_API_KEY, _2, _3, _4, _5
 - Other API keys: OPENROUTER, GOOGLE, GIPHY, TMDB, GUARDIAN, NEWS, NASA, API_NINJAS, SERPER, HF
 - Platform: TELEGRAM_BOT_TOKEN, FB_PAGE_ACCESS_TOKEN, FB_VERIFY_TOKEN, DISCORD_APP_ID, DISCORD_BOT_TOKEN, DISCORD_PUBLIC_KEY
@@ -136,13 +139,12 @@ worker/
 9. **search_youtube** — YouTube Data API v3
 10. **show_map** — Google Maps URL
 
-### NOT in BIZLI_TOOLS (dead code in executeTool, should clean up)
-- translate_text, get_crypto_price, get_recipe, get_joke, get_quote
-- define_word, get_nasa_apod, calculate_math, get_country_info
-- get_iss_location, get_stock_price, shorten_url, get_holidays
-- get_fun_fact, generate_qr, search_products, get_news
-
-(17 dead handlers. Promote them back to BIZLI_TOOLS OR delete them. Decision pending.)
+### Dead tool handlers — DELETED (v12.29.2)
+The 17 unreachable executeTool cases (translate, crypto, recipe, jokes, etc.) were
+removed. NOTE: much of that functionality is still live via the keyword router
+`detectIntent()` in commands.ts (jokes, recipes, crypto, trivia, pokémon, news…) —
+that's a separate layer that bypasses the LLM. Don't delete apis.ts functions
+without checking commands.ts usage first.
 
 ---
 
@@ -220,18 +222,17 @@ dir "C:\Users\bizli\Downloads\index*.ts" /OD
 
 ---
 
-## BIZLI'S KNOWN BUGS (Phase 4 — Lab is ready, fix these now)
+## BIZLI'S KNOWN BUGS — ALL FIXED in v12.30.0 (2026-07-03)
 
-Use Lab Agent's diagnostic power to find root causes before fixing.
-
-- Feminine Hindi grammar sometimes wrong (sakti vs sakta)
-- Timezone handling for non-Indian countries occasionally wrong
-- !agent command list display issue (minor)
-- autoExtractMemory doubles Groq calls every 4 messages (quota risk at scale)
-- Dead callGemini() in brain.ts (getGeminiKeys("bizli") returns [] — dead code, clean up)
-- 17 dead tool handlers in executeTool() (translate, crypto, recipe, etc.) — delete or promote
-
-**Approach:** Use Lab Agent's diagnostic power to find root causes before fixing.
+- ✅ Feminine Hindi grammar — regex safety net in PHRASE_REPLACEMENTS ("X-ta hoon"→"X-ti hoon", Roman + Devanagari; safe because "hoon" is strictly first-person)
+- ✅ Timezone for non-Indian countries — getWorldTime no longer defaults to IST; geocodes unknown cities (nominatim→timeapi.io) or falls through to the tool which asks; "what time is it" with no location uses the user's saved tz
+- ✅ !agent command list — feedback + broadcast test added
+- ✅ autoExtractMemory — now Cerebras-first, Groq only as fallback
+- ✅ Dead callGemini() — deleted (v12.29.2)
+- ✅ 17 dead tool handlers — deleted (v12.29.2)
+- ✅ Semantic memory was silently OFF (getEmbedding used wrong key scope) — fixed, uses Lab keys + fallback embed model (768-dim locked for Supabase)
+- ✅ !status/!brains/!agent status showed 0 Gemini keys — fixed, now show full 4-provider chain
+- ✅ groqExhausted() checked stale model slots — now uses live model list
 
 ---
 
@@ -246,18 +247,20 @@ Use Lab Agent's diagnostic power to find root causes before fixing.
 
 ## KNOWN TECHNICAL DEBT
 
-1. `callGemini()` in brain.ts is dead code (getGeminiKeys("bizli") returns []). Should be removed for clarity.
-2. 17 unreachable tool handlers in executeTool() (translate, crypto, recipe, etc.). Delete or promote.
-3. `autoExtractMemory` doubles Groq calls every 4 messages. Quota risk at scale.
-4. `index_BACKUP_v11.80.2.ts` (7,116 lines) in repo unused. Delete safely.
-5. Cron at 1,000 users sends ~1,000 messages per tick. Rate limit risk.
-6. Web search rate-limited 15/hour/user.
+1. Cron at 1,000 users sends ~1,000 messages per tick. Rate limit risk.
+2. Web search rate-limited 15/hour/user.
+3. GitHub `origin/main` diverged from local (local = deployed truth, ~v12.30.0;
+   GitHub stuck at old v12.18.0 line). Local commits are safe on disk. Reconcile
+   later — do NOT force-push without backing up the remote branch first.
+4. Supabase `test_results` table SQL still pending (Tests tab data blocker).
 
 ---
 
 ## DECISIONS USER HAS MADE (LOCKED IN)
 
-- **Gemini = Lab-only forever** (separated from Bizli's chat)
+- **Gemini = Lab-only forever** (separated from Bizli's chat; Lab keys also power memory embeddings)
+- **MCP rejected** — Bizli's models (Llama/gpt-oss via OpenAI-style function calling) don't speak MCP, and Workers are stateless. BIZLI_TOOLS array IS the on-demand tool mechanism. Do not add MCP.
+- **Additive-only in brain.ts** — never rewrite the working callGroq tool-calling loop
 - **OpenRouter** = future role: maintenance/cache cleanup analyzer
 - **Worker AI** = last resort for basic chat
 - **Privacy strict** — no user names/messages in dashboard UI

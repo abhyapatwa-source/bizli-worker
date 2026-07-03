@@ -4,7 +4,7 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v12.29.2";
+export const BIZLI_VERSION = "v12.30.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -357,6 +357,17 @@ export const PHRASE_REPLACEMENTS: [RegExp, string][] = [
   [/[^.!?]*\btext-based AI\b[^.!?]*[.!?]?/gi, ""],
   [/[^.!?]*don'?t have the capability to (visually )?(see|interpret) images?[^.!?]*[.!?]?/gi, ""],
   [/[^.!?]*\bcan'?t (see|interpret) images?\b[^.!?]*[.!?]?/gi, ""],
+  // Feminine grammar safety net — "hoon/हूँ" is strictly first-person and Bizli
+  // is always female, so masculine first-person forms are always wrong.
+  [/\b([a-z]+)ta h(oo|u)n\b/gi, "$1ti h$2n"],
+  [/\braha h(oo|u)n\b/gi, "rahi h$1n"],
+  [/\bgaya h(oo|u)n\b/gi, "gayi h$1n"],
+  [/ता हूँ/g, "ती हूँ"],
+  [/ता हूं/g, "ती हूं"],
+  [/रहा हूँ/g, "रही हूँ"],
+  [/रहा हूं/g, "रही हूं"],
+  [/गया हूँ/g, "गयी हूँ"],
+  [/गया हूं/g, "गयी हूं"],
 ];
 
 export const IMG_MARKER = "\n\n__BIZLI_IMG__:";
@@ -423,10 +434,13 @@ export async function groqExhausted(env: Env): Promise<boolean> {
   const keys = getGroqKeys(env);
   if (!keys.length) return true;
   const status = await getGroqStatus(env);
+  // Use the LIVE model list — callGroq writes mc cooldowns under modelSlot()-derived
+  // slots, so checking the static defaults would miss real model-level cooldowns.
+  const { text: liveModels } = await getActiveGroqModels(env);
   const now = Date.now();
   return keys.every((_, i) => {
     if ((status.cooldowns[i] || 0) > now) return true;
-    return GROQ_TEXT_MODELS.every(({ slot }) => (status.mc[`${i}_${slot}`] || 0) > now);
+    return liveModels.every(({ slot }) => (status.mc[`${i}_${slot}`] || 0) > now);
   });
 }
 
@@ -602,6 +616,29 @@ export async function callGroqJSON(env: Env, prompt: string): Promise<any> {
   return null;
 }
 
+// JSON task on Cerebras (gemma leads) — same contract as callGroqJSON. Used to
+// offload background jobs (memory extraction) from Groq's chat quota.
+export async function callCerebrasJSON(env: Env, prompt: string): Promise<any> {
+  const keys = getCerebrasKeys(env);
+  if (!keys.length) return null;
+  const models = await getActiveCerebrasModels(env);
+  for (const key of keys) {
+    try {
+      const res = await fetchTimeout("https://api.cerebras.ai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        body: JSON.stringify({ model: models[0], messages: [{ role: "user", content: prompt }], temperature: 0.3, max_tokens: 300 }),
+      }, 8000);
+      if (!res || !res.ok) continue;
+      const data = await res.json() as any;
+      const text = data?.choices?.[0]?.message?.content || "";
+      if (!text) continue;
+      return JSON.parse(text.replace(/```json|```/g, "").trim());
+    } catch { continue; }
+  }
+  return null;
+}
+
 export async function autoExtractMemory(env: Env, userId: string, userMsg: string, bizliReply: string): Promise<void> {
   try {
     if (userMsg.trim().length < 15) return;
@@ -609,13 +646,17 @@ export async function autoExtractMemory(env: Env, userId: string, userMsg: strin
     const n = parseInt(await env.BIZLI_MEMORY.get(cKey) || "0") + 1;
     await env.BIZLI_MEMORY.put(cKey, String(n), { expirationTtl: 30 * 86400 });
     if (n % 4 !== 0) return;
-    const result = await callGroqJSON(env, `Extract important facts about the user from this conversation.
+    const extractPrompt = `Extract important facts about the user from this conversation.
 Return JSON array (empty [] if nothing important):
 [{"category":"fact|preference|event|relationship|boundary","content":"short fact","keywords":["word"],"importance":1-5}]
 Importance: 5=name/identity, 4=major life fact, 3=preference, 2=minor detail.
 Only return JSON array.
 User: "${userMsg}"
-Bizli: "${bizliReply}"`);
+Bizli: "${bizliReply}"`;
+    // Cerebras first (separate free quota) — Groq only as fallback, so extraction
+    // no longer competes with chat for Groq's rate limits.
+    let result = await callCerebrasJSON(env, extractPrompt);
+    if (!result) result = await callGroqJSON(env, extractPrompt);
     if (!result || !Array.isArray(result)) return;
     for (const mem of result) {
       if (mem.importance >= 3) await saveMemory(env, userId, mem.category, mem.content, mem.keywords || [], mem.importance);

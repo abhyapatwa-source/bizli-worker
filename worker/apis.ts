@@ -1,11 +1,44 @@
 import type { Env } from './types';
 import { fetchTimeout } from './utils';
 
+// WMO weather codes → emoji (used by the open-meteo fallback)
+function wmoEmoji(code: number): string {
+  if (code === 0) return "☀️";
+  if (code <= 2) return "🌤️";
+  if (code === 3) return "☁️";
+  if (code <= 48) return "🌫️";
+  if (code <= 57) return "🌦️";
+  if (code <= 67) return "🌧️";
+  if (code <= 77) return "🌨️";
+  if (code <= 82) return "🌧️";
+  if (code <= 86) return "🌨️";
+  return "⛈️";
+}
+
 export async function getWeather(location: string): Promise<string> {
+  // Primary: wttr.in (one call, nice format)
   try {
-    const res = await fetch(`https://wttr.in/${encodeURIComponent(location)}?format=3`);
-    if (!res.ok) return "";
-    return (await res.text()).trim();
+    const res = await fetchTimeout(`https://wttr.in/${encodeURIComponent(location)}?format=3`, {}, 6000);
+    if (res?.ok) {
+      const text = (await res.text()).trim();
+      // wttr.in sometimes returns error pages with 200 — only accept plausible output
+      if (text && text.length < 120 && !/unknown location|sorry|error/i.test(text)) return text;
+    }
+  } catch {}
+  // Fallback: open-meteo (free, no key) — geocode then current conditions
+  try {
+    const geoRes = await fetchTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`, {}, 5000);
+    if (!geoRes?.ok) return "";
+    const geo = await geoRes.json() as any;
+    const place = geo?.results?.[0];
+    if (!place?.latitude) return "";
+    const wxRes = await fetchTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m`, {}, 5000);
+    if (!wxRes?.ok) return "";
+    const wx = await wxRes.json() as any;
+    const c = wx?.current;
+    if (c?.temperature_2m === undefined) return "";
+    const name = [place.name, place.country_code].filter(Boolean).join(", ");
+    return `${name}: ${wmoEmoji(c.weather_code ?? 0)} ${Math.round(c.temperature_2m)}°C (feels ${Math.round(c.apparent_temperature ?? c.temperature_2m)}°C), wind ${Math.round(c.wind_speed_10m ?? 0)} km/h`;
   } catch { return ""; }
 }
 
@@ -68,39 +101,53 @@ export async function getWorldTime(location: string): Promise<string> {
       "middle east": "Asia/Dubai",
     };
     const loc = location.toLowerCase().trim();
-    let timezone = "Asia/Kolkata";
+    let timezone = "";
     for (const [key, tz] of Object.entries(zones)) {
       if (loc.includes(key)) { timezone = tz; break; }
     }
-    const res = await fetch(`https://worldtimeapi.org/api/timezone/${timezone}`);
-    if (!res.ok) {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString("en-US", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: true });
-      const dateStr = now.toLocaleDateString("en-US", { timeZone: timezone, weekday: "long", day: "numeric", month: "long", year: "numeric" });
-      return `${timeStr} on ${dateStr}`;
+    // Unknown location: geocode it instead of guessing — never default to IST.
+    if (!timezone && loc) {
+      try {
+        const geoRes = await fetchTimeout(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`, {
+          headers: { "User-Agent": "BizliAI/1.0 (telegram bot)" }
+        }, 5000);
+        if (geoRes?.ok) {
+          const geoData = await geoRes.json() as any[];
+          if (geoData?.[0]?.lat && geoData?.[0]?.lon) {
+            const timeRes = await fetchTimeout(`https://timeapi.io/api/time/current/coordinate?latitude=${geoData[0].lat}&longitude=${geoData[0].lon}`, {}, 5000);
+            if (timeRes?.ok) {
+              const td = await timeRes.json() as any;
+              if (td?.timeZone) timezone = td.timeZone;
+            }
+          }
+        }
+      } catch {}
     }
-    const data = await res.json() as any;
-    const dt = new Date(data.datetime);
-    const timeStr = dt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-    const dateStr = dt.toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-    return `${timeStr} on ${dateStr} (${timezone.split("/")[1]?.replace("_", " ") || timezone})`;
-  } catch (e) {
-    try {
-      const now = new Date();
-      return now.toLocaleString("en-US", { timeZone: "Asia/Kolkata", dateStyle: "full", timeStyle: "short" });
-    } catch { return ""; }
-  }
+    if (!timezone) return ""; // caller falls through to the brain, which asks properly
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("en-US", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: true });
+    const dateStr = now.toLocaleDateString("en-US", { timeZone: timezone, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return `${timeStr} on ${dateStr} (${timezone.split("/").pop()?.replace(/_/g, " ") || timezone})`;
+  } catch { return ""; }
 }
 
 export async function getCurrency(from: string, to: string, amount: number): Promise<string> {
-  try {
-    const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${from}`);
-    if (!res.ok) return "";
-    const data = await res.json() as any;
-    const rate = data.rates?.[to];
-    if (!rate) return "";
-    return `${amount} ${from} = ${(amount * rate).toFixed(2)} ${to}`;
-  } catch { return ""; }
+  // Primary + fallback sources, same response shape (rates map). Both free, no key.
+  const sources = [
+    `https://api.exchangerate-api.com/v4/latest/${from}`,
+    `https://open.er-api.com/v6/latest/${from}`,
+  ];
+  for (const url of sources) {
+    try {
+      const res = await fetchTimeout(url, {}, 5000);
+      if (!res?.ok) continue;
+      const data = await res.json() as any;
+      const rate = data.rates?.[to];
+      if (!rate) continue;
+      return `${amount} ${from} = ${(amount * rate).toFixed(2)} ${to}`;
+    } catch { continue; }
+  }
+  return "";
 }
 
 export async function getCrypto(coin: string): Promise<string> {

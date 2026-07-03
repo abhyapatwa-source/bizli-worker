@@ -1,6 +1,6 @@
 import type { Env } from './types';
 import { db } from './db';
-import { getGroqKeys, getGeminiKeys, fetchTimeout, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB, getYouTubeLink } from './utils';
+import { getGroqKeys, getGeminiKeys, getCerebrasKeys, getOpenRouterKeys, fetchTimeout, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB, getYouTubeLink } from './utils';
 import { sendTelegram, answerCallback, sendSupportToAdmin, sendRichResponse } from './telegram';
 import { isAdminSession, setAuthStateHelper, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
 import { searchWeb, readUrl } from './search';
@@ -100,9 +100,22 @@ export async function detectIntent(env: Env, text: string, chatId: string, userI
   const timeRx = /(?:current time|what time is it|time in|time now|what.s the time|abhi time|kitne baje)(?: in| at)? ?(.+)?/i;
   const tm = text.match(timeRx);
   if (tm || lower.includes("current time") || lower.includes("what time") || lower.includes("time in ")) {
-    const loc = (tm?.[1] || "").trim() || "India";
-    const t = await getWorldTime(loc);
-    if (t) { await sendTelegram(env, chatId, `🕐 ${t}`); return true; }
+    const loc = (tm?.[1] || "").trim();
+    if (loc) {
+      const t = await getWorldTime(loc);
+      if (t) { await sendTelegram(env, chatId, `🕐 ${t}`); return true; }
+    } else {
+      // No location named — use THEIR saved timezone, never assume India.
+      const userTz = await env.BIZLI_MEMORY.get(`tz_${userId}`);
+      if (userTz) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString("en-US", { timeZone: userTz, hour: "2-digit", minute: "2-digit", hour12: true });
+        const dateStr = now.toLocaleDateString("en-US", { timeZone: userTz, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        await sendTelegram(env, chatId, `🕐 ${timeStr} on ${dateStr} (${userTz.split("/").pop()?.replace(/_/g, " ")})`);
+        return true;
+      }
+      // Unknown timezone — fall through so the brain's get_current_time tool asks.
+    }
   }
 
   const currencyNames: Record<string, string> = {
@@ -588,16 +601,21 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     const cooling = keys.length - ready;
     const hist = (await getKVHistory(env, userId)).length;
     const mems = await getUserMemories(env, userId);
-    const gemKeys = getGeminiKeys(env).length;
+    const gemKeys = getGeminiKeys(env, "lab").length;
+    const cerKeys = getCerebrasKeys(env).length;
+    const orKeys = getOpenRouterKeys(env).length;
     const groqBar = "🟢".repeat(ready) + "🔴".repeat(cooling);
+    const cerBar = "🟢".repeat(cerKeys) + "⚫".repeat(Math.max(0, 5 - cerKeys));
     const gemBar = "🟢".repeat(gemKeys) + "⚫".repeat(Math.max(0, 5 - gemKeys));
     const userTz = (await env.BIZLI_MEMORY.get(`tz_${userId}`)) || "UTC";
     const localTime = new Date().toLocaleTimeString("en-US", { timeZone: userTz, hour: "2-digit", minute: "2-digit", hour12: true });
     const statusMsg =
       `🧠 Bizli Brain Status — ${BIZLI_VERSION}\n\n` +
       `🧠 Frontal Cortex (Groq): ${groqBar}\n   ${ready}/${keys.length} neurons active${cooling ? ` · ${cooling} cooling` : ""}\n\n` +
-      `🧬 Temporal Lobe (Gemini): ${gemBar}\n   ${gemKeys}/5 circuits ready · steps in if Groq rests\n\n` +
+      `⚡ Motor Cortex (Cerebras): ${cerBar}\n   ${cerKeys}/5 circuits ready · steps in if Groq rests\n\n` +
+      `🌐 Parietal Lobe (OpenRouter): ${orKeys ? "🟢" : "⚫"} ${orKeys} key${orKeys !== 1 ? "s" : ""} · free-model pool backup\n\n` +
       `🫀 Brainstem (Worker AI): 🟢 always on · last resort\n\n` +
+      `🧬 Temporal Lobe (Gemini): ${gemBar}\n   ${gemKeys}/5 circuits · Lab diagnostics only\n\n` +
       `💾 Hippocampus: ${mems.length} memories stored\n` +
       `💬 Short-term: ${hist}/15 messages in context\n` +
       `🕐 Your time: ${localTime} (${userTz})\n\n` +
@@ -640,13 +658,17 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
       }
       return `  ${i + 1} ${name}: ⏳ RPM — ready in ${Math.ceil(remaining / 1000)}s`;
     }).join("\n");
-    const gemCount = getGeminiKeys(env).length;
+    const gemCount = getGeminiKeys(env, "lab").length;
+    const cerCount = getCerebrasKeys(env).length;
+    const orCount = getOpenRouterKeys(env).length;
     const msg =
       `🧠 Bizli Brains — Live View\n\n` +
       `🔵 Last 5 messages driven by:\n${brainLog}\n\n` +
       `🧠 Groq Neurons (${keys.length} configured):\n${groqKeyLines}\n\n` +
-      `🧬 Gemini (${gemCount} key${gemCount !== 1 ? "s" : ""} configured): ✅ no cooldown tracking — all assumed ready\n` +
-      `🫀 Brainstem (Worker AI): ✅ standby\n\n` +
+      `⚡ Cerebras (${cerCount} key${cerCount !== 1 ? "s" : ""} configured): ✅ fallback #1 — auto-discovered models\n` +
+      `🌐 OpenRouter (${orCount} key${orCount !== 1 ? "s" : ""} configured): ✅ fallback #2 — free-model pool\n` +
+      `🫀 Brainstem (Worker AI): ✅ standby — last resort\n` +
+      `🧬 Gemini (${gemCount} key${gemCount !== 1 ? "s" : ""} configured): 🔬 Lab diagnostics only, never chats\n\n` +
       `🕐 ${new Date().toUTCString()}`;
     await sendTelegram(env, chatId, msg);
     return true;

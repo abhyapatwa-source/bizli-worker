@@ -1,6 +1,37 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-02 (monitoring room / dashboard UI polish)
+## Last session: 2026-07-03 (no-maintainer longevity: self-healing brains + fix-everything sweep)
+
+### Current production state
+- Version: **v12.30.0** (deployed + verified via /health and /admin/stats)
+- Git: **REPAIRED** — corrupted refs/heads/main fixed (was 41 bytes of spaces; restored to recovered dangling commit v12.22.0). All session work committed LOCALLY. GitHub deliberately untouched (origin/main diverged at v12.18.0 line, ~51 commits of separate history — do NOT force-push without backing up remote first).
+
+### What we did (v12.28.0 → v12.30.0)
+- **v12.29.0** — Self-healing brain chain: Cerebras added as fallback #1 (5 keys, CEREBRAS_API_KEY_1..5, all added to CF secrets + verified live); OpenRouter upgraded to auto-fetched `:free` pool with key rotation; `probeAllProviders()` re-probes ALL providers on 12h cron. Chain: Groq → Cerebras → OpenRouter pool → Worker AI.
+- **v12.29.1** — Cerebras model IDs corrected to real account catalog: gemma-4-31b (direct-answer, leads), gpt-oss-120b + zai-glm-4.7 (reasoning models, secondary, max_tokens 800).
+- **v12.29.2** — Dead-code cleanup: 379 lines removed (17 unreachable executeTool cases, 5 unused apis.ts fns, 5 unused search.ts fns, dead callGemini + imageTopicForTool in brain.ts). Kept everything the commands.ts keyword router still uses.
+- **v12.30.0** — Fix-everything sweep:
+  - Semantic memory ON (getEmbedding → "lab" keys + gemini-embedding-001 fallback @768-dim)
+  - !status/!brains/!agent status show real 4-provider chain (were showing 0 Gemini)
+  - groqExhausted() now checks live model slots (was checking stale static slots)
+  - Timezone: getWorldTime never defaults to IST; geocodes unknown cities; no-location "what time" uses user's saved tz
+  - autoExtractMemory → Cerebras-first (Groq quota freed)
+  - Hindi feminine grammar regex net (X-ta hoon→X-ti hoon, Roman + Devanagari)
+  - !agent help list completed; !agent models/refresh models cover all 4 providers
+  - /admin/stats: + cerebras/openrouter fields
+  - Weather + currency tools now dual-source (open-meteo, open.er-api.com fallbacks — endpoints curl-verified)
+  - CLAUDE.md fully synced to reality
+
+### Pending next session
+1. GitHub reconcile (user deferred): back up remote main, then push local as truth.
+2. Supabase `test_results` table SQL (Tests tab data blocker).
+3. User live-checks on Telegram: !status, !brains, !agent status, "time in Reykjavik", "weather in Tokyo".
+4. Verify semantic memory: Supabase memories rows should start gaining embeddings.
+5. Dashboard tabs could display Cerebras/OpenRouter (stats fields exist now) — cosmetic, optional.
+
+---
+
+## Previous session: 2026-07-02 (monitoring room / dashboard UI polish)
 
 ### Current production state
 - Version: **v12.28.0** (deployed + verified live via /admin/stats)

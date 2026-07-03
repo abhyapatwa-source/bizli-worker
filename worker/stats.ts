@@ -1,8 +1,8 @@
 import type { Env } from './types';
 import { db } from './db';
-import { getGroqKeys, getGeminiKeys, hashPin, timeAgo, todayContext } from './utils';
+import { getGroqKeys, getGeminiKeys, getCerebrasKeys, getOpenRouterKeys, hashPin, timeAgo, todayContext } from './utils';
 import { DASHBOARD_HTML } from './html';
-import { getGroqStatus, BIZLI_VERSION, callGroq, autoExtractMemory, sanitizePersonaLeaks } from './brain';
+import { getGroqStatus, BIZLI_VERSION, callGroq, autoExtractMemory, sanitizePersonaLeaks, getActiveCerebrasModels, getActiveOpenRouterModels } from './brain';
 import { BIZLI_TOOLS } from './tools';
 import { getKVHistory, appendKVHistory, getRelevantMemories } from './memory';
 import { getTestStats } from './tests';
@@ -140,7 +140,8 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
     version: BIZLI_VERSION,
     groq: groqData,
     gemini: { keysConfigured: getGeminiKeys(env, "lab").length, status: "standby" },
-    openrouter: { configured: !!env.OPENROUTER_API_KEY },
+    cerebras: { keysConfigured: getCerebrasKeys(env).length, liveModels: await getActiveCerebrasModels(env), status: "standby" },
+    openrouter: { configured: !!env.OPENROUTER_API_KEY, keysConfigured: getOpenRouterKeys(env).length, liveModels: await getActiveOpenRouterModels(env) },
     workerAI: { status: "standby" },
     lastBrains,
     recentErrors,

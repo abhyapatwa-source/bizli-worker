@@ -22,19 +22,31 @@ export async function appendKVHistory(env: Env, userId: string, role: string, co
 }
 
 export async function getEmbedding(env: Env, text: string): Promise<number[] | null> {
-  const keys = getGeminiKeys(env);
+  // Gemini keys live under the "lab" scope — the default ("bizli") is always empty.
+  const keys = getGeminiKeys(env, "lab");
   if (!keys.length) return null;
-  for (const key of keys) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: { parts: [{ text: text.slice(0, 2000) }] } }),
-      });
-      if (!res.ok) continue;
-      const data = await res.json() as any;
-      if (data?.embedding?.values) return data.embedding.values;
-    } catch { continue; }
+  // Try text-embedding-004 first; fall back to gemini-embedding-001 if retired.
+  // outputDimensionality: 768 keeps vectors compatible with the Supabase
+  // vector(768) column used by rpc/match_memories.
+  const models: { id: string; body: any }[] = [
+    { id: "text-embedding-004", body: { content: { parts: [{ text: text.slice(0, 2000) }] } } },
+    { id: "gemini-embedding-001", body: { content: { parts: [{ text: text.slice(0, 2000) }] }, outputDimensionality: 768 } },
+  ];
+  for (const { id, body } of models) {
+    for (const key of keys) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${id}:embedContent?key=${key}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.status === 404) break; // model gone — try next model, not next key
+        if (!res.ok) continue;
+        const data = await res.json() as any;
+        const values = data?.embedding?.values;
+        if (Array.isArray(values) && values.length === 768) return values;
+      } catch { continue; }
+    }
   }
   return null;
 }
