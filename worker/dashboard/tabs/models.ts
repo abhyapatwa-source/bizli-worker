@@ -17,6 +17,18 @@ export const MODELS_HTML = `<div class="panel" id="models-section">
   </div>
   <div class="msub" style="margin-bottom:16px">Image understanding &middot; locked, not rotated</div>
 
+  <div class="mgroup-hdr" style="margin-top:14px">CEREBRAS <span class="bpill bfallback" style="font-size:.6rem;margin-left:6px">FALLBACK #1</span></div>
+  <div id="m-cer-list" class="mmodel-list">
+    <div class="mmodel-loading">Loading&hellip;</div>
+  </div>
+  <div class="msub">Auto-discovered &middot; steps in when Groq is exhausted</div>
+
+  <div class="mgroup-hdr" style="margin-top:14px">OPENROUTER FREE POOL <span class="bpill bfallback" style="font-size:.6rem;margin-left:6px">FALLBACK #2</span></div>
+  <div id="m-or-list" class="mmodel-list">
+    <div class="mmodel-loading">Loading&hellip;</div>
+  </div>
+  <div class="msub">Auto-fetched :free models &middot; key rotation ready</div>
+
   <div class="mgroup-hdr" style="margin-top:14px">GEMINI LAB <span class="bpill blab" style="font-size:.6rem;margin-left:6px">LAB-ONLY</span></div>
   <div id="m-gemini-text" class="mmodel-list">
     <div class="mmodel-loading">Loading&hellip;</div>

@@ -209,12 +209,27 @@ function updateBrains(d){
   if(gkeys)gkeys.textContent=ready+"/"+total+" ready";
   var glast=document.getElementById("b-groq-last");
   if(glast){var gl=d.lastBrains&&d.lastBrains.find(function(b){return b.brain.toLowerCase()==="groq";});glast.textContent=gl?gl.timeAgo:"never";}
+  var cerActive=lastBrain==="cerebras";
+  var cerdot=document.getElementById("b-cer-dot");
+  var cerstat=document.getElementById("b-cer-status");
+  if(cerdot&&cerstat){cerdot.className="bdot "+(cerActive?"bdot-green":"bdot-standby");cerstat.textContent=cerActive?"ACTIVE":"STANDBY";}
+  var cerkeys=document.getElementById("b-cer-keys");
+  if(cerkeys)cerkeys.textContent=(d.cerebras?d.cerebras.keysConfigured:0)+" configured";
+  var cermodels=document.getElementById("b-cer-models");
+  if(cermodels&&d.cerebras&&d.cerebras.liveModels&&d.cerebras.liveModels.length)cermodels.textContent=d.cerebras.liveModels.join(" · ");
+  var cerlast=document.getElementById("b-cer-last");
+  if(cerlast){var cel=d.lastBrains&&d.lastBrains.find(function(b){return b.brain.toLowerCase()==="cerebras";});cerlast.textContent=cel?cel.timeAgo:"never";}
   var orActive=lastBrain==="openrouter";
   var ordot=document.getElementById("b-or-dot");
   var orstat=document.getElementById("b-or-status");
   if(ordot&&orstat){ordot.className="bdot "+(orActive?"bdot-green":"bdot-standby");orstat.textContent=orActive?"ACTIVE":"STANDBY";}
   var orkey=document.getElementById("b-or-key");
   if(orkey)orkey.textContent=(d.openrouter&&d.openrouter.configured)?"Configured":"Not configured";
+  var ormodels=document.getElementById("b-or-models");
+  if(ormodels&&d.openrouter&&d.openrouter.liveModels&&d.openrouter.liveModels.length){
+    var orm=d.openrouter.liveModels;
+    ormodels.textContent=orm.slice(0,2).map(function(id){return (id.split("/").pop()||id).replace(":free","");}).join(" · ")+(orm.length>2?" +"+(orm.length-2)+" more":"");
+  }
   var orlast=document.getElementById("b-or-last");
   if(orlast){var ol=d.lastBrains&&d.lastBrains.find(function(b){return b.brain.toLowerCase()==="openrouter";});orlast.textContent=ol?ol.timeAgo:"never";}
   var cflast=document.getElementById("b-cf-last");
@@ -256,9 +271,9 @@ function updateHealth(d){
 
 function updatePipeline(d){
   var lb=d.lastBrains&&d.lastBrains.length?d.lastBrains[0].brain.toLowerCase():"groq";
-  var nodes=["pn-groq","pn-or","pn-cf","pn-gem"];
+  var nodes=["pn-groq","pn-cer","pn-or","pn-cf","pn-gem"];
   nodes.forEach(function(id){var n=document.getElementById(id);if(n){n.classList.remove("pl-active","pl-fallback");}});
-  var active=lb==="groq"?"pn-groq":lb==="openrouter"?"pn-or":(lb==="cf ai"||lb==="worker ai")?"pn-cf":lb==="gemini"?"pn-gem":null;
+  var active=lb==="groq"?"pn-groq":lb==="cerebras"?"pn-cer":lb==="openrouter"?"pn-or":(lb==="cf ai"||lb==="worker ai")?"pn-cf":lb==="gemini"?"pn-gem":null;
   if(active){var an=document.getElementById(active);if(an)an.classList.add(lb==="groq"?"pl-active":"pl-fallback");}
   var sub=document.getElementById("pn-groq-sub");
   if(sub&&d.groq){var rk=d.groq.filter(function(k){return k.status==="ready";}).length;sub.textContent=rk+"/"+d.groq.length+" ready";}
@@ -280,6 +295,24 @@ function updateModels(d){
   }
   var gv=document.getElementById("m-groq-vision");
   if(gv)gv.textContent=m.groqVision||"—";
+  var cerl=document.getElementById("m-cer-list");
+  if(cerl){
+    var ch="";
+    var cms=(d.cerebras&&d.cerebras.liveModels)||[];
+    if(cms.length){
+      cms.forEach(function(id,i){ch+="<div class='mmodel-item'><span class='mmodel-num'>"+(i+1)+".</span><span class='mmodel-id'>"+esc(id)+"</span><span class='mmodel-tag mmodel-tag-live'>LIVE</span></div>";});
+    }else{ch="<div style='color:var(--muted);font-size:.72rem;padding:6px'>No models discovered yet &mdash; run !agent refresh models</div>";}
+    cerl.innerHTML=ch;
+  }
+  var orl=document.getElementById("m-or-list");
+  if(orl){
+    var oh="";
+    var oms=(d.openrouter&&d.openrouter.liveModels)||[];
+    if(oms.length){
+      oms.forEach(function(id,i){oh+="<div class='mmodel-item'><span class='mmodel-num'>"+(i+1)+".</span><span class='mmodel-id'>"+esc(id)+"</span><span class='mmodel-tag mmodel-tag-live'>FREE</span></div>";});
+    }else{oh="<div style='color:var(--muted);font-size:.72rem;padding:6px'>Pool not fetched yet &mdash; run !agent refresh models</div>";}
+    orl.innerHTML=oh;
+  }
   var geml=document.getElementById("m-gemini-text");
   if(geml){
     var gh="";

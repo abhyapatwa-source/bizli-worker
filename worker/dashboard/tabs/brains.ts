@@ -14,13 +14,24 @@ export const BRAINS_HTML = `<div id="brains-section" class="panel">
     </div>
 
     <div class="bcrd">
-      <div class="bcrd-hdr">OPENROUTER <span class="bpill bfallback">FALLBACK</span></div>
+      <div class="bcrd-hdr">CEREBRAS <span class="bpill bfallback">FALLBACK #1</span></div>
+      <div class="bstat-row">
+        <span class="bdot" id="b-cer-dot"></span>
+        <span class="bstat-lbl" id="b-cer-status">&#8212;</span>
+      </div>
+      <div class="brow"><span class="bk">Keys</span><span class="bv" id="b-cer-keys">&#8212;</span></div>
+      <div class="brow"><span class="bk">Models</span><span class="bv bmodels" id="b-cer-models">—</span></div>
+      <div class="brow"><span class="bk">Last fired</span><span class="bv" id="b-cer-last">&#8212;</span></div>
+    </div>
+
+    <div class="bcrd">
+      <div class="bcrd-hdr">OPENROUTER <span class="bpill bfallback">FALLBACK #2</span></div>
       <div class="bstat-row">
         <span class="bdot" id="b-or-dot"></span>
         <span class="bstat-lbl" id="b-or-status">&#8212;</span>
       </div>
       <div class="brow"><span class="bk">Key</span><span class="bv" id="b-or-key">&#8212;</span></div>
-      <div class="brow"><span class="bk">Model</span><span class="bv">llama-3.1-8b-instruct:free</span></div>
+      <div class="brow"><span class="bk">Models</span><span class="bv bmodels" id="b-or-models">—</span></div>
       <div class="brow"><span class="bk">Last fired</span><span class="bv" id="b-or-last">&#8212;</span></div>
     </div>
 

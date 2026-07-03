@@ -4,12 +4,10 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-// v12.32.0 — COMMAND REARRANGEMENT: flash-card help (single source of truth),
-// !settings/!deleteme/!agent quota/!agent test added; !ping/!brains/!stats/
-// !storage/!agent users removed; anatomy-only user !status (privacy);
-// dedup'd forgotpin/recover/support + approve/deny/block; / menu aliases;
-// hardcoded admin fallback password removed (fail closed).
-export const BIZLI_VERSION = "v12.32.0";
+// v12.33.0 — DASHBOARD 4-PROVIDER CHAIN: Cerebras card + pipeline node added,
+// live Cerebras/OpenRouter model pools wired into Brains + Models tabs,
+// stale hardcoded OpenRouter model replaced with the live pool.
+export const BIZLI_VERSION = "v12.33.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

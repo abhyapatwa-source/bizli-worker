@@ -44,10 +44,16 @@ export const ORB_HTML = `<!-- BIZLI HOLOGRAM -->
       <div class="plsub">AI Core</div>
     </div>
     <div class="plarrow">&#x2192;</div>
+    <div class="plnode" id="pn-cer">
+      <div class="pldot"></div>
+      <div class="plname">CEREBRAS</div>
+      <div class="plsub">Fallback #1</div>
+    </div>
+    <div class="plarrow">&#x2192;</div>
     <div class="plnode" id="pn-or">
       <div class="pldot"></div>
       <div class="plname">OPENROUTER</div>
-      <div class="plsub">Tools Core</div>
+      <div class="plsub">Fallback #2</div>
     </div>
     <div class="plarrow">&#x2192;</div>
     <div class="plnode plnode-last" id="pn-cf">
