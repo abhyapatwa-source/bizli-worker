@@ -22,7 +22,18 @@
   - Weather + currency tools now dual-source (open-meteo, open.er-api.com fallbacks — endpoints curl-verified)
   - CLAUDE.md fully synced to reality
 
-### Pending next session
+### ⭐ NEXT UP (Abhya's direction, 2026-07-03, resume after his break) — KILL THE KEYWORD ROUTER
+**Decision:** Bizli must be brain-first like ChatGPT, for every language — with her Snapchat-AI short/simple voice. The `detectIntent()` keyword layer (commands.ts) is WRONG for a global product:
+- It's English-only regex running BEFORE the brain → English users get hijacked into canned API dumps (no persona, no brevity); non-English users skip it and get the proper brain+tools path. Inconsistent by language = not global.
+- It answers from pasted regex logic; the model is already trained — tools exist to give it REAL live data on demand, model-invoked.
+
+**Target architecture:**
+- ONE pipeline: every chat message → callGroq with BIZLI_TOOLS. Model decides tool use. No regex pre-emption of informational queries.
+- Keyword layer shrinks to ONLY non-chat flows: `!commands` (help/status/etc.), image-generation flow (rate limit + style picker UX), auth/registration. Everything else (weather, time, news, jokes, movies, shopping, "what is X", translation, crypto) → the brain, which answers natively or calls a tool.
+- Voice: CRITICAL_RULES' short Snapchat style becomes the ONLY voice since nothing bypasses her.
+- Consider during build: does BIZLI_TOOLS need get_news added (search_web may suffice)? Groq load increases (every message hits the LLM) — chain now has Cerebras/OpenRouter cushion for that. Preserve trivia state? (minor).
+
+### Other pending
 1. GitHub reconcile (user deferred): back up remote main, then push local as truth.
 2. Supabase `test_results` table SQL (Tests tab data blocker).
 3. User live-checks on Telegram: !status, !brains, !agent status, "time in Reykjavik", "weather in Tokyo".
