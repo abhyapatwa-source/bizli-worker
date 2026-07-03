@@ -4,7 +4,9 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v12.30.0";
+// v12.31.0 — BRAIN-FIRST: keyword router gone (image-gen flow only), 12 tools
+// (+crypto +stock), proactive Groq quota skip, ~700 lines of dead code removed.
+export const BIZLI_VERSION = "v12.31.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -304,7 +306,7 @@ GEN Z EMOTION STYLE: Match emotional moments with natural Gen Z warmth — not p
 FINISH EVERY SENTENCE — never cut off mid-thought.
 Recommendations = "• Name | 💰Price | ⭐Rating | 🔗Link". News = 2-3 bullets max + 1 source link. Locations = maps link. Zero filler ("hope this helps", "let me know", "is there anything else").
 
-TOOLS: You have 10 tools for REAL-TIME data and external services only. For knowledge questions (jokes, math, definitions, translation, recipes, country facts, holidays, crypto/stock prices, etc.) — answer from your own training knowledge. You're a powerful 120B model, you know these things. Don't reach for a tool when you can just answer. DO use tools for: live weather, current time anywhere, today's news/events, current office-holders (CM/PM/President — positions change and your training is stale for them), live currency rates, specific movie/show info by title, reading a URL the user shares, YouTube video searches, map/location requests. For get_movie_info: only call when the user names a real title. When a tool returns results, trust and report them — results beat training memory. Do NOT end replies with questions like "is there anything else?", "do you want me to...?", "kya aapko madad chahiye?" — it's annoying, especially in casual/emotional chat. When someone shares a feeling, respond warmly like a friend who CARES — just be present and warm, at most ONE gentle question if it fits.
+TOOLS: You have 12 tools for REAL-TIME data and external services only. For knowledge questions (jokes, math, definitions, translation, recipes, country facts, holidays, etc.) — answer from your own training knowledge. You're a powerful 120B model, you know these things. Don't reach for a tool when you can just answer. DO use tools for: live weather, current time anywhere, today's news/events, current office-holders (CM/PM/President — positions change and your training is stale for them), live currency rates, crypto prices (get_crypto_price), stock/index prices (get_stock_price), specific movie/show info by title, reading a URL the user shares, YouTube video searches, map/location requests. PRICES ARE NEVER FROM MEMORY: any crypto, stock, index, or exchange-rate number MUST come from a tool call — your training data prices are months old and wrong. For get_movie_info: only call when the user names a real title. When a tool returns results, trust and report them — results beat training memory. Do NOT end replies with questions like "is there anything else?", "do you want me to...?", "kya aapko madad chahiye?" — it's annoying, especially in casual/emotional chat. When someone shares a feeling, respond warmly like a friend who CARES — just be present and warm, at most ONE gentle question if it fits.
 
 VISION: When a user sends a photo, you can actually see it — describe/discuss it naturally and specifically (like a friend looking at their photo), don't say you can't see images. Keep it conversational, 1-3 lines unless they ask for detail. FOLLOW-UPS about a photo (e.g. "english", "in detail", "are you sure?"): the photo itself isn't re-attached, but YOUR OWN PREVIOUS REPLY in this conversation already describes it — use that description to answer (translate it, expand on it, etc.). NEVER say "I can't see images" or "I'm text-based" when you literally just described one — that's contradictory and confusing.
 
@@ -372,15 +374,41 @@ export const PHRASE_REPLACEMENTS: [RegExp, string][] = [
 
 export const IMG_MARKER = "\n\n__BIZLI_IMG__:";
 
-interface GroqStatus { ptr: number; cooldowns: Record<number, number>; mc: Record<string, number>; }
+// Per key+model quota counters: m = reqs this minute, mT = tokens this minute,
+// d = reqs today. Soft limits keep rotation flowing BEFORE Groq returns 429s.
+interface QuotaCounter { m: number; mT: number; mStart: number; d: number; dStart: number }
+interface GroqStatus { ptr: number; cooldowns: Record<number, number>; mc: Record<string, number>; q: Record<string, QuotaCounter>; }
+
+const QUOTA_SOFT_RPM = 25;
+const QUOTA_SOFT_TPM = 5500;
+const QUOTA_SOFT_RPD = 900;
+
+function quotaExceeded(status: GroqStatus, comboKey: string): boolean {
+  const q = status.q?.[comboKey];
+  if (!q) return false;
+  const now = Date.now();
+  if (now - q.dStart < 86_400_000 && q.d >= QUOTA_SOFT_RPD) return true;
+  if (now - q.mStart < 60_000 && (q.m >= QUOTA_SOFT_RPM || q.mT >= QUOTA_SOFT_TPM)) return true;
+  return false;
+}
+
+function recordQuotaUse(status: GroqStatus, comboKey: string, tokens: number): void {
+  if (!status.q) status.q = {};
+  const now = Date.now();
+  let q = status.q[comboKey];
+  if (!q || now - q.dStart >= 86_400_000) q = { m: 0, mT: 0, mStart: now, d: 0, dStart: now };
+  if (now - q.mStart >= 60_000) { q.m = 0; q.mT = 0; q.mStart = now; }
+  q.m++; q.mT += tokens; q.d++;
+  status.q[comboKey] = q;
+}
 
 export async function getGroqStatus(env: Env): Promise<GroqStatus> {
   try {
     const val = await env.BIZLI_MEMORY.get("groq_status");
-    if (!val) return { ptr: 0, cooldowns: {}, mc: {} };
+    if (!val) return { ptr: 0, cooldowns: {}, mc: {}, q: {} };
     const p = JSON.parse(val);
-    return { ptr: p.ptr ?? 0, cooldowns: p.cooldowns ?? {}, mc: p.mc ?? {} };
-  } catch { return { ptr: 0, cooldowns: {}, mc: {} }; }
+    return { ptr: p.ptr ?? 0, cooldowns: p.cooldowns ?? {}, mc: p.mc ?? {}, q: p.q ?? {} };
+  } catch { return { ptr: 0, cooldowns: {}, mc: {}, q: {} }; }
 }
 
 export async function saveGroqStatus(env: Env, status: GroqStatus): Promise<void> {
@@ -687,6 +715,9 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
 
     for (const { id: usedModel, slot } of modelsToTry) {
       if (!hasVisionContent && (status.mc[`${i}_${slot}`] || 0) > Date.now()) continue;
+      // Proactive quota skip: treat near-limit combos as cooling so rotation
+      // flows to the next key/model silently — users never see a 429.
+      if (quotaExceeded(status, `${i}_${slot}`)) continue;
 
       try {
         const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
@@ -759,6 +790,7 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
         if (!choice) continue;
 
         status.ptr = (i + 1) % keys.length;
+        recordQuotaUse(status, `${i}_${slot}`, data.usage?.total_tokens || 500);
         statusDirty = true;
 
         if (handleTools && choice.message?.tool_calls?.length > 0 && chatId) {

@@ -87,13 +87,6 @@ export async function sendImageCard(env: Env, chatId: string, text: string, imgU
   } catch { return false; }
 }
 
-export async function sendRichResponse(env: Env, chatId: string, text: string, query: string): Promise<void> {
-  const imgUrl = await getWikiImage(query);
-  if (imgUrl && await sendImageCard(env, chatId, text, imgUrl)) return;
-  // No image — just send text
-  await sendTelegram(env, chatId, text);
-}
-
 // Transcribe a Telegram voice/audio message.
 // Tries Groq whisper-large-v3-turbo first (faster, better accuracy, handles
 // Indian accents + Hinglish well). Falls back to Cloudflare AI Whisper.

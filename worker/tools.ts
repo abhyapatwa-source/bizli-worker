@@ -104,6 +104,22 @@ export const BIZLI_TOOLS = [
       parameters: { type: "object", properties: { query: { type: "string", description: "Location or place, e.g. 'Taj Mahal Agra' or 'cafes near Connaught Place Delhi'" } }, required: ["query"] }
     }
   },
+  {
+    type: "function",
+    function: {
+      name: "get_crypto_price",
+      description: "Get the LIVE price of a cryptocurrency (USD + INR + 24h change). ALWAYS use this for any crypto price question — never answer from memory, prices change every minute.",
+      parameters: { type: "object", properties: { coin: { type: "string", description: "Coin name or symbol, e.g. 'bitcoin', 'btc', 'ethereum', 'solana'" } }, required: ["coin"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_stock_price",
+      description: "Get the LIVE price of a stock or market index. ALWAYS use this for any stock/share/index price question — never answer from memory. Use Yahoo Finance symbols, e.g. 'AAPL', 'TSLA', 'RELIANCE.NS' (Indian stocks need .NS), '^NSEI' (Nifty 50).",
+      parameters: { type: "object", properties: { symbol: { type: "string", description: "Ticker symbol, e.g. 'AAPL' or 'RELIANCE.NS'" } }, required: ["symbol"] }
+    }
+  },
 ];
 
 interface RateLimitConfig { max: number; windowMs: number; }
@@ -292,6 +308,14 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
       case "show_map": {
         const q = encodeURIComponent(args.query || "");
         return `📍 ${args.query}\nhttps://maps.google.com/maps?q=${q}`;
+      }
+      case "get_crypto_price": {
+        const c = await getCrypto(args.coin || "");
+        return c || `couldn't fetch a live price for "${args.coin}" — double-check the coin name?`;
+      }
+      case "get_stock_price": {
+        const s = await getStockPrice(args.symbol || "");
+        return s || `couldn't fetch a live price for "${args.symbol}" — Indian stocks need .NS (e.g. RELIANCE.NS)`;
       }
       default:
         return "Tool not found";
