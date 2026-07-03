@@ -1,6 +1,68 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-03 (no-maintainer longevity: self-healing brains + fix-everything sweep)
+## Last session: 2026-07-04 (BRAIN-FIRST executed + command rearrangement + dashboard 4-chain)
+
+### Current production state
+- Version: **v12.33.0** (deployed + verified: /health, /admin/stats, dashboard markup)
+- Maintenance mode: **ON** throughout the session (users locked out — Abhya must
+  verify live and turn OFF when satisfied: `!maintenance off`)
+- Git: 3 new local commits (25f9463 v12.31.0, ba64644 v12.32.0, ba44d03 v12.33.0).
+  GitHub still diverged/untouched (see Other pending).
+
+### What we did (v12.30.0 → v12.33.0)
+- **v12.31.0 — BRAIN-FIRST (the paused plan, executed):** detectIntent gutted to
+  image-gen flow only (classifyNewsIntent + ~28 regex branches deleted); 2 new
+  tools get_crypto_price + get_stock_price (→12 total); CRITICAL_RULES forces all
+  prices through tools; PROACTIVE Groq quota mgmt (per key+model counters
+  {m,mT,mStart,d,dStart} in groq_status KV, soft limits 25rpm/5500tpm/900rpd,
+  skip-before-429, zero new KV writes); waste cleanup: 26 orphaned apis.ts fns +
+  sendRichResponse + getYouTubeLink deleted (+67/−774 lines).
+- **v12.32.0 — COMMAND REARRANGEMENT (discussed & approved this session):**
+  flash-card help generated from USER_CARD/ADMIN_CARD arrays in admin.ts (can't
+  drift); NEW: !settings (tz+greetings toggles), !deleteme (ownership-verified
+  full Supabase+KV wipe), !agent quota (live counters), !agent test (brain
+  canary: latency+provider); REMOVED: !ping, !brains, !stats, !storage,
+  !agent users + aliases (active/memory usage/logs), hardcoded admin fallback
+  password ("06062024" — now fails closed); user !status is anatomy-only
+  (privacy rule: NO provider/key names to users, ever); !mydetails edit buttons;
+  dedup: sendForgotPinRequest/sendSupportPrompt/startRecoverFlow +
+  approveUser/denyUser/blockUser shared by typed cmds, buttons, and index.ts
+  intercept; native / menu (/help /settings /status /support) registered via
+  new /admin/set-menu route (setMyCommands returned ok:true).
+- **v12.33.0 — DASHBOARD 4-PROVIDER CHAIN:** Cerebras card in Brains tab +
+  pipeline node (GROQ→CEREBRAS→OPENROUTER→WORKER AI); OpenRouter card now shows
+  live :free pool (stale hardcoded model gone); Models tab gained Cerebras +
+  OpenRouter groups; wired d.cerebras + d.openrouter.liveModels (existed since
+  v12.30.0, unused). Dashboard template JS syntax-checked via node --check.
+- CLAUDE.md fully synced (12 tools, router gone, command realms, file sizes,
+  stale "empty tabs" note fixed).
+- Session incident: C: drive hit 0 bytes free mid-deploy — cleared npm cache
+  (~1GB freed). Downloads folder (3.9GB) untouched. Disk is still tight!
+
+### Abhya's live checks pending (Telegram, before maintenance OFF)
+1. "what is the capital of France" → short brain answer (no 📰/🔍 dump)
+2. "bitcoin price" / "Apple stock price" → tool-driven live prices
+3. !help → flash card · !mydetails → edit buttons · !settings → toggles
+4. !status → anatomy-only (no Groq/key names) · !ping/!brains → brain replies
+5. !admin <pw> → admin card · !agent quota · !agent test
+6. Telegram "/" button shows the 4-command menu
+7. Dashboard in browser: Brains tab 5 cards (Cerebras between Groq/OpenRouter),
+   orb pipeline 4 nodes, Models tab shows Cerebras + OpenRouter pools
+8. !deleteme — test ONLY with a throwaway account
+
+### Other pending
+1. GitHub reconcile (deferred): back up remote main, then push local as truth.
+   Local = 10+ commits ahead on separate history. Do NOT force-push blind.
+2. Supabase `test_results` table SQL (Tests tab data blocker).
+3. Verify semantic memory embeddings accumulating in Supabase.
+4. Disk space: C: was at 0 bytes; ~1GB freed. Abhya should clear Downloads etc.
+5. Automation ideas discussed (not built): watchdog + daily admin digest,
+   post-probe canary cron (foundation now exists: !agent test), auto-degrade
+   mode, memory hygiene cron.
+
+---
+
+## Previous session: 2026-07-03 (no-maintainer longevity: self-healing brains + fix-everything sweep)
 
 ### Current production state
 - Version: **v12.30.0** (deployed + verified via /health and /admin/stats)
@@ -22,6 +84,7 @@
   - Weather + currency tools now dual-source (open-meteo, open.er-api.com fallbacks — endpoints curl-verified)
   - CLAUDE.md fully synced to reality
 
+### ✅ EXECUTED 2026-07-04 as v12.31.0 — plan below kept for reference only
 ### ⏸️ PAUSED MID-BUILD (2026-07-03) — "brain-first" build STARTED then stopped by Abhya ("we will do it later")
 **State:** Production = v12.30.0, safe, untouched. Only 2 inert local edits made (committed as WIP):
 1. `apis.ts` — `getStockPrice()` restored (Yahoo Finance, tool backend)

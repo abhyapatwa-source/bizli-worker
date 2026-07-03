@@ -42,7 +42,16 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.30.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.33.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+
+### BRAIN-FIRST (since v12.31.0) — the keyword router is DEAD
+Every chat message in every language goes: commands check → brain (callGroq +
+BIZLI_TOOLS). `detectIntent()` in commands.ts now contains ONLY the
+image-generation flow (rate limit + style picker). There is no regex layer
+answering informational queries anymore — the model decides tool use.
+callGroq also does PROACTIVE quota management: per key+model counters
+(25 req/min, 5500 tok/min, 900 req/day soft limits) stored in the existing
+`groq_status` KV key — combos near limits are skipped silently before any 429.
 
 ---
 
@@ -78,16 +87,16 @@ models auto-drop, new ones auto-adopt. No code edits needed to stay current.
 
 ```
 worker/
-  index.ts         (~486 lines) — HTTP routing + cron triggers
-  brain.ts         (~800 lines) — AI brain, model rotation, persona
-  tools.ts         (~400 lines) — 10 production tools
-  commands.ts      (~872 lines) — User slash commands
-  admin.ts         (~548 lines) — Admin commands (!approve, !ban, etc.)
-  apis.ts          (~521 lines) — Third-party API wrappers
+  index.ts         (~529 lines) — HTTP routing + cron triggers + pre-auth intercepts
+  brain.ts         (~1023 lines) — AI brain, model rotation, quota mgmt, persona
+  tools.ts         (~326 lines) — 12 production tools
+  commands.ts      (~529 lines) — User commands + callbacks + image-gen intent
+  admin.ts         (~640 lines) — Admin commands, flash cards, !agent subcommands
+  apis.ts          (~142 lines) — Tool backends only (weather/stock/currency/crypto/movie/tv)
   search.ts        (~334 lines) — Web search (Tavily + Serper)
-  auth.ts          (~285 lines) — User registration + PIN auth
-  utils.ts         (~293 lines) — Helpers (key getters, script detection)
-  telegram.ts      (~257 lines) — Telegram API wrappers
+  auth.ts          (~291 lines) — User registration + PIN auth
+  utils.ts         (~301 lines) — Helpers (key getters, script detection)
+  telegram.ts      (~250 lines) — Telegram API wrappers
   stats.ts         (~226 lines) — /admin/stats endpoint
   agents.ts        (~154 lines) — Cron agents
   memory.ts        (~126 lines) — KV + Supabase memory
@@ -97,15 +106,12 @@ worker/
   facebook.ts      (~60 lines)  — Facebook Messenger
   group.ts         (~118 lines) — Telegram groups
   html.ts          (~391 lines) — Dashboard HTML assembler (thin)
-  dashboard/       — 17 split modules for the dashboard UI
+  dashboard/       — split modules for the dashboard UI (ALL populated)
     styles.ts, scripts.ts, gate.ts, topbar.ts, leftnav.ts
     orb.ts, rightpanel.ts
     tabs/
-      overview.ts, keys.ts, errors.ts, tools.ts, users.ts, vitals.ts
-      brains.ts                  ← active
-      models.ts                  ← empty (Phase 2 to populate)
-      livefeed.ts                ← empty (Phase 2 to populate)
-      maintenance.ts             ← empty (Phase 2 to populate)
+      overview.ts, keys.ts, errors.ts, tools.ts, users.ts, vitals.ts,
+      brains.ts, models.ts, livefeed.ts, maintenance.ts, tests.ts, settings.ts
 ```
 
 (Backup file `index_BACKUP_v11.80.2.ts` already deleted — repo is clean of dead files as of v12.29.2.)
@@ -126,25 +132,47 @@ worker/
 
 ---
 
-## BIZLI'S 10 ACTIVE TOOLS (in BIZLI_TOOLS)
+## BIZLI'S 12 ACTIVE TOOLS (in BIZLI_TOOLS)
 
-1. **get_weather** — current weather, any location worldwide
-2. **get_current_time** — time in any city/country (timezone-aware)
+1. **get_weather** — current weather, any location worldwide (wttr.in + open-meteo)
+2. **get_current_time** — time in any city/country (timezone-aware, geocoding fallback)
 3. **search_web** — Tavily primary, Serper fallback
-4. **convert_currency** — all major currencies
+4. **convert_currency** — all major currencies (dual-source)
 5. **get_movie_info** — TMDB API, all languages
 6. **read_url** — read and summarize any public URL
 7. **save_to_vault** — private diary entries (KV, capped 50)
-8. **send_gif** — Giphy API
+8. **send_gif** — Giphy API (GIF-for-GIF only)
 9. **search_youtube** — YouTube Data API v3
 10. **show_map** — Google Maps URL
+11. **get_crypto_price** — live crypto prices (CoinGecko) — added v12.31.0
+12. **get_stock_price** — live stock/index prices (Yahoo Finance) — added v12.31.0
 
-### Dead tool handlers — DELETED (v12.29.2)
-The 17 unreachable executeTool cases (translate, crypto, recipe, jokes, etc.) were
-removed. NOTE: much of that functionality is still live via the keyword router
-`detectIntent()` in commands.ts (jokes, recipes, crypto, trivia, pokémon, news…) —
-that's a separate layer that bypasses the LLM. Don't delete apis.ts functions
-without checking commands.ts usage first.
+### Keyword router — DELETED (v12.31.0)
+`detectIntent()` keeps ONLY the image-generation flow. All informational
+queries (jokes, weather, news, prices, shopping, translate, …) go to the
+brain, which answers natively or calls a tool. apis.ts now contains ONLY
+tool backends — nothing else references it.
+
+## COMMANDS (rearranged v12.32.0 — flash cards)
+- Help is generated from single arrays (USER_CARD / ADMIN_CARD in admin.ts).
+  When adding/removing a command, update its handler AND the card array.
+- User commands (advertised): !mydetails (edit buttons) · !settings ·
+  !logout · !remember/!memories/!forget · !search · !status (anatomy-only,
+  NO provider/key names — privacy rule) · !myusage · !support · !feedback ·
+  !forgotpin · !deleteme (verified full wipe). Typed !editname etc. still
+  work but aren't advertised.
+- Admin realms: !admin = PEOPLE (users/approve/deny/block/msg/broadcast…),
+  !agent = SYSTEM (status/quota/test/models/errors/kv/uptime/report/clear…).
+  Removed: !ping, !brains, !stats, !storage, !agent users + all aliases.
+- Native / menu: /help /settings /status /support alias to ! commands
+  (registered via /admin/set-menu?key=<ADMIN_PASSWORD>, re-run after
+  changing the menu).
+- !admin has NO fallback password since v12.32.0 — fails closed if the
+  ADMIN_PASSWORD secret is unset.
+- Shared single implementations: sendForgotPinRequest / sendSupportPrompt
+  (commands.ts), startRecoverFlow (auth.ts), approveUser/denyUser/blockUser
+  (admin.ts) — used by typed commands, buttons, AND the index.ts pre-auth
+  intercept. Never inline-copy these flows.
 
 ---
 
