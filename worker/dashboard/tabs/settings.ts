@@ -26,7 +26,25 @@ export const SETTINGS_HTML = `<div class="panel" id="settings-section">
   <!-- DISPLAY -->
   <div class="set-block">
     <div class="set-hdr"><i data-lucide="monitor"></i> DISPLAY</div>
-    <label class="set-check"><input type="checkbox" id="set-motion"> <span>Reduce motion (disable animations)</span></label>
+    <div class="set-row">
+      <span class="set-lbl">TEXT SIZE</span>
+      <input id="set-textsize" type="range" min="80" max="130" value="100" step="5" class="set-slider">
+      <span id="set-textsize-val" class="set-val">100%</span>
+    </div>
+    <div class="set-row">
+      <span class="set-lbl">FONT</span>
+      <select id="set-font" class="set-select">
+        <option value="mono">Terminal Mono (default)</option>
+        <option value="console">Console</option>
+        <option value="sans">Formal Sans</option>
+        <option value="tahoma">Clean Sans</option>
+        <option value="trebuchet">Modern Sans</option>
+        <option value="serif">Formal Serif</option>
+        <option value="palatino">Elegant Serif</option>
+        <option value="system">System UI</option>
+      </select>
+    </div>
+    <label class="set-check" style="margin-top:6px"><input type="checkbox" id="set-motion"> <span>Reduce motion (disable animations)</span></label>
   </div>
 
   <div id="set-toast" class="set-toast">Saved</div>

@@ -1,10 +1,10 @@
 import type { Env } from './types';
-import { getGroqKeys, getGeminiKeys, fetchTimeout } from './utils';
+import { getGroqKeys, getGeminiKeys, getCerebrasKeys, getOpenRouterKeys, fetchTimeout } from './utils';
 import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v12.21.0";
+export const BIZLI_VERSION = "v12.29.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -42,8 +42,118 @@ const GEMINI_CANDIDATE_POOL = [
   "gemini-2.5-flash-lite",
 ];
 
+// Cerebras — 2nd independent free provider (OpenAI-compatible). Auto-discovered
+// from its /models endpoint; preference order below picks the strongest live ones.
+const CEREBRAS_DEFAULT_MODELS = ["llama-3.3-70b", "llama3.1-8b"];
+const CEREBRAS_PREFERENCE = [
+  "llama-3.3-70b",
+  "gpt-oss-120b",
+  "qwen-3-235b-a22b-instruct-2507",
+  "qwen-3-32b",
+  "llama-4-scout-17b-16e-instruct",
+  "llama-4-maverick-17b-128e-instruct",
+  "llama3.1-8b",
+];
+
+// OpenRouter — one key unlocks a whole pool of :free models. Auto-discovered so
+// dead free models drop off and newly-added ones get adopted with zero code edits.
+const OPENROUTER_DEFAULT_MODELS = [
+  "meta-llama/llama-3.1-8b-instruct:free",
+  "google/gemma-2-9b-it:free",
+  "mistralai/mistral-7b-instruct:free",
+];
+const OPENROUTER_PREFERENCE_HINTS = ["llama", "qwen", "mistral", "gemma", "deepseek", "phi"];
+
 function modelSlot(id: string): string {
   return id.replace(/[^a-z0-9]/gi, "").slice(-8).toLowerCase();
+}
+
+// Fetch the model-id list from any OpenAI-compatible /models endpoint.
+async function fetchOpenAIModelIds(url: string, apiKey: string): Promise<string[]> {
+  try {
+    const res = await fetchTimeout(url, {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+    }, 6000);
+    if (!res || !res.ok) return [];
+    const data = await res.json() as any;
+    const list: any[] = data?.data || data?.models || [];
+    return list.map((m: any) => m?.id || m?.name).filter((x: any): x is string => typeof x === "string");
+  } catch { return []; }
+}
+
+export async function getActiveCerebrasModels(env: Env): Promise<string[]> {
+  try {
+    const raw = await env.BIZLI_MEMORY.get("cerebras_live_models");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    }
+  } catch {}
+  return CEREBRAS_DEFAULT_MODELS;
+}
+
+export async function probeCerebrasModels(env: Env): Promise<{ models: string[]; changed: boolean }> {
+  const keys = getCerebrasKeys(env);
+  if (!keys.length) return { models: [], changed: false };
+  const ids = await fetchOpenAIModelIds("https://api.cerebras.ai/v1/models", keys[0]);
+  // Keep preferred models that are actually live; fall back to raw list if none match.
+  let live = CEREBRAS_PREFERENCE.filter(m => ids.includes(m));
+  if (!live.length && ids.length) live = ids.slice(0, 4);
+  live = live.slice(0, 4);
+  if (!live.length) return { models: [], changed: false };
+  const prev = await env.BIZLI_MEMORY.get("cerebras_live_models").catch(() => null);
+  const next = JSON.stringify(live);
+  const changed = prev !== next;
+  await env.BIZLI_MEMORY.put("cerebras_live_models", next, { expirationTtl: 172800 }).catch(() => {});
+  return { models: live, changed };
+}
+
+export async function getActiveOpenRouterModels(env: Env): Promise<string[]> {
+  try {
+    const raw = await env.BIZLI_MEMORY.get("openrouter_live_models");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    }
+  } catch {}
+  return OPENROUTER_DEFAULT_MODELS;
+}
+
+export async function probeOpenRouterModels(env: Env): Promise<{ models: string[]; changed: boolean }> {
+  const keys = getOpenRouterKeys(env);
+  if (!keys.length) return { models: [], changed: false };
+  const ids = await fetchOpenAIModelIds("https://openrouter.ai/api/v1/models", keys[0]);
+  const free = ids.filter(id => id.endsWith(":free"));
+  if (!free.length) return { models: [], changed: false };
+  // Rank preferred families first, keep the known-good default at the front if present.
+  const ranked = free.sort((a, b) => {
+    const sa = OPENROUTER_PREFERENCE_HINTS.findIndex(h => a.toLowerCase().includes(h));
+    const sb = OPENROUTER_PREFERENCE_HINTS.findIndex(h => b.toLowerCase().includes(h));
+    return (sa === -1 ? 99 : sa) - (sb === -1 ? 99 : sb);
+  });
+  const live = ranked.slice(0, 6);
+  const prev = await env.BIZLI_MEMORY.get("openrouter_live_models").catch(() => null);
+  const next = JSON.stringify(live);
+  const changed = prev !== next;
+  await env.BIZLI_MEMORY.put("openrouter_live_models", next, { expirationTtl: 172800 }).catch(() => {});
+  return { models: live, changed };
+}
+
+// One call the cron runs to re-probe EVERY brain provider at once. Each provider
+// self-prunes dead models and adopts new ones — no code edits needed to stay current.
+export async function probeAllProviders(env: Env): Promise<{
+  groq: { text: string[]; vision: string; changed: boolean };
+  gemini: { models: string[]; changed: boolean };
+  cerebras: { models: string[]; changed: boolean };
+  openrouter: { models: string[]; changed: boolean };
+}> {
+  const [groq, gemini, cerebras, openrouter] = await Promise.all([
+    probeGroqModels(env),
+    probeGeminiModels(env),
+    probeCerebrasModels(env),
+    probeOpenRouterModels(env),
+  ]);
+  return { groq, gemini, cerebras, openrouter };
 }
 
 export async function getActiveGroqModels(env: Env): Promise<{ text: { id: string; slot: string }[]; vision: string }> {
@@ -450,24 +560,66 @@ export async function callGemini(
   return "";
 }
 
+// Cerebras fallback — independent free provider, rotates keys × auto-discovered
+// models. Plain text (no tools) like the other fallbacks; runs only if Groq fails.
+export async function callCerebras(env: Env, messages: any[], systemExtra: string): Promise<string> {
+  const keys = getCerebrasKeys(env);
+  if (!keys.length) return "";
+  const models = await getActiveCerebrasModels(env);
+  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
+  for (const key of keys) {
+    for (const model of models) {
+      try {
+        const res = await fetchTimeout("https://api.cerebras.ai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "system", content: system }, ...messages],
+            temperature: 0.75,
+            max_tokens: 512,
+          }),
+        }, 8000);
+        if (!res) continue;
+        if (res.status === 429) break; // this key is rate-limited — move to next key
+        if (!res.ok) continue;         // model unavailable — try next model
+        const data = await res.json() as any;
+        const text = (data?.choices?.[0]?.message?.content || "").trim();
+        if (text) return text;
+      } catch { continue; }
+    }
+  }
+  return "";
+}
+
 export async function callOpenRouter(env: Env, messages: any[], systemExtra: string): Promise<string> {
-  if (!env.OPENROUTER_API_KEY) return "";
-  try {
-    const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.OPENROUTER_API_KEY}` },
-      body: JSON.stringify({
-        model: "meta-llama/llama-3.1-8b-instruct:free",
-        messages: [{ role: "system", content: system }, ...messages],
-        temperature: 0.75,
-        max_tokens: 512,
-      }),
-    });
-    if (!res.ok) return "";
-    const data = await res.json() as any;
-    return (data?.choices?.[0]?.message?.content || "").trim();
-  } catch { return ""; }
+  const keys = getOpenRouterKeys(env);
+  if (!keys.length) return "";
+  const models = await getActiveOpenRouterModels(env);
+  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
+  for (const key of keys) {
+    for (const model of models) {
+      try {
+        const res = await fetchTimeout("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "system", content: system }, ...messages],
+            temperature: 0.75,
+            max_tokens: 512,
+          }),
+        }, 8000);
+        if (!res) continue;
+        if (res.status === 429) break; // key throttled — next key
+        if (!res.ok) continue;         // free model unavailable — next model
+        const data = await res.json() as any;
+        const text = (data?.choices?.[0]?.message?.content || "").trim();
+        if (text) return text;
+      } catch { continue; }
+    }
+  }
+  return "";
 }
 
 export async function callCloudflareAI(env: Env, messages: any[], systemExtra: string): Promise<string> {
@@ -869,6 +1021,9 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
       ? m.content.map((c: any) => c.type === "text" ? c.text : "[image]").join(" ")
       : m.content,
   }));
+
+  const cerebras = await callCerebras(env, flatMessages, systemExtra);
+  if (cerebras) { await recordLastBrain(env, "Cerebras"); return sanitizePersonaLeaks(cerebras); }
 
   const openrouter = await callOpenRouter(env, flatMessages, systemExtra);
   if (openrouter) { await recordLastBrain(env, "OpenRouter"); return sanitizePersonaLeaks(openrouter); }

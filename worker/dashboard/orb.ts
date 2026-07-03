@@ -74,4 +74,5 @@ export const ORB_HTML = `<!-- BIZLI HOLOGRAM -->
     <div class="skel-row" style="max-width:80%"></div>
     <div class="skel-row" style="max-width:65%"></div>
   </div>
+  <div class="lc-box"><span class="lc-tag">SYS.STREAM &middot; live</span><div id="lc-stream" class="lc-stream"></div></div>
 </div>`;

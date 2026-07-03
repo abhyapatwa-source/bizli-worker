@@ -30,6 +30,15 @@ export interface Env {
   GEMINI_API_KEY_4?: string;
   GEMINI_API_KEY_5?: string;
   OPENROUTER_API_KEY?: string;
+  OPENROUTER_API_KEY_2?: string;
+  OPENROUTER_API_KEY_3?: string;
+  OPENROUTER_API_KEY_4?: string;
+  OPENROUTER_API_KEY_5?: string;
+  CEREBRAS_API_KEY_1?: string;
+  CEREBRAS_API_KEY_2?: string;
+  CEREBRAS_API_KEY_3?: string;
+  CEREBRAS_API_KEY_4?: string;
+  CEREBRAS_API_KEY_5?: string;
   GUARDIAN_API_KEY?: string;
   DISCORD_APP_ID?: string;
   DISCORD_PUBLIC_KEY?: string;

@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { db } from './db';
 import { getGroqKeys, getUserLocalHour, MORNING_MSGS, NIGHT_MSGS } from './utils';
 import { sendTelegram } from './telegram';
-import { getGroqStatus, probeGroqModels, probeGeminiModels } from './brain';
+import { getGroqStatus, probeAllProviders } from './brain';
 import { runBizliTests } from './tests';
 
 function pickProactiveMessage(name: string, localHour: number): string {
@@ -143,10 +143,7 @@ export async function runAgents(env: Env): Promise<void> {
     const lastModelCheck = await env.BIZLI_MEMORY.get("last_model_check");
     if (!lastModelCheck || now - parseInt(lastModelCheck) > 43_200_000) {
       await env.BIZLI_MEMORY.put("last_model_check", String(now), { expirationTtl: 90000 });
-      const [groqResult, geminiResult] = await Promise.all([
-        probeGroqModels(env),
-        probeGeminiModels(env),
-      ]);
+      const { groq: groqResult, gemini: geminiResult, cerebras: cerebrasResult, openrouter: openrouterResult } = await probeAllProviders(env);
       const alerts: string[] = [];
       if (groqResult.changed && groqResult.text.length) {
         alerts.push(
@@ -156,6 +153,16 @@ export async function runAgents(env: Env): Promise<void> {
       if (geminiResult.changed && geminiResult.models.length) {
         alerts.push(
           `Gemini Lab (${geminiResult.models.length}):\n${geminiResult.models.map((m, i) => `  ${i + 1}. ${m}`).join("\n")}`
+        );
+      }
+      if (cerebrasResult.changed && cerebrasResult.models.length) {
+        alerts.push(
+          `Cerebras (${cerebrasResult.models.length}):\n${cerebrasResult.models.map((m, i) => `  ${i + 1}. ${m}`).join("\n")}`
+        );
+      }
+      if (openrouterResult.changed && openrouterResult.models.length) {
+        alerts.push(
+          `OpenRouter free pool (${openrouterResult.models.length}):\n${openrouterResult.models.map((m, i) => `  ${i + 1}. ${m}`).join("\n")}`
         );
       }
       if (alerts.length) {

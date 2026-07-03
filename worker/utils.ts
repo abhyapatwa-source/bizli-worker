@@ -255,6 +255,18 @@ export function getGeminiKeys(env: Env, purpose: "bizli" | "lab" = "bizli"): str
   return []; // Bizli chat no longer uses Gemini — keys reserved for Lab Agent
 }
 
+// Cerebras keys — 2nd independent free provider, rotated like Groq.
+export function getCerebrasKeys(env: Env): string[] {
+  return [env.CEREBRAS_API_KEY_1, env.CEREBRAS_API_KEY_2, env.CEREBRAS_API_KEY_3,
+    env.CEREBRAS_API_KEY_4, env.CEREBRAS_API_KEY_5].filter(Boolean) as string[];
+}
+
+// OpenRouter keys — supports 1 or many; rotated if more than one is set.
+export function getOpenRouterKeys(env: Env): string[] {
+  return [env.OPENROUTER_API_KEY, env.OPENROUTER_API_KEY_2, env.OPENROUTER_API_KEY_3,
+    env.OPENROUTER_API_KEY_4, env.OPENROUTER_API_KEY_5].filter(Boolean) as string[];
+}
+
 export function titleCase(s: string): string {
   return s.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
