@@ -22,7 +22,22 @@
   - Weather + currency tools now dual-source (open-meteo, open.er-api.com fallbacks — endpoints curl-verified)
   - CLAUDE.md fully synced to reality
 
-### ⭐ NEXT UP (Abhya's direction, 2026-07-03, resume after his break) — KILL THE KEYWORD ROUTER
+### ⏸️ PAUSED MID-BUILD (2026-07-03) — "brain-first" build STARTED then stopped by Abhya ("we will do it later")
+**State:** Production = v12.30.0, safe, untouched. Only 2 inert local edits made (committed as WIP):
+1. `apis.ts` — `getStockPrice()` restored (Yahoo Finance, tool backend)
+2. `tools.ts` — import line now includes `getCrypto, getStockPrice` (nothing calls them yet — tsc clean)
+
+**RESUME PLAN (approved by Abhya, execute when he says go):**
+1. **Add 2 tools to BIZLI_TOOLS** (→ 12 total): `get_crypto_price` (backend getCrypto, exists) + `get_stock_price` (backend restored). Add both executeTool cases.
+2. **Fix CRITICAL_RULES TOOLS paragraph** (brain.ts): crypto/stock prices must come from TOOLS, never training data (current text wrongly says answer prices from training). Say "12 tools".
+3. **Gut detectIntent()** (commands.ts) to ONLY the image-generation flow (rate limit + style picker). Delete: classifyNewsIntent + all regex branches (weather/time/currency/crypto/jokes/quotes/dictionary/country/catfact/dog/nasa/iss/spacex/recipe/cocktail/pokemon/trivia/numberfact/news/movies/tv/trending/shopping/riddle/sciencefact/math/qr/translate/URL-summary/searchKw). Make news_yes/news_no callbacks reply gracefully ("just ask me for news anytime") without getNews.
+4. **Proactive quota management (Groq)** — piggyback on existing groq_status KV write (NO new KV keys; free-tier KV write limits matter): extend GroqStatus with per `${keyIdx}_${slot}` counters {m: reqs this minute, mT: tokens this minute (from data.usage.total_tokens), mStart, d: reqs today, dStart}. In callGroq model loop, SKIP combos over soft limits (~25 req/min, ~5500 tokens/min, ~900 req/day) — treat as cooling so rotation flows to next key/model silently. Keep existing reactive 429 handling. Users never see degradation ("without making user feel bizli sucks"). Cerebras/OpenRouter stay reactive (fallback-only, low volume).
+5. **Waste cleanup after gutting** (grep-verify each): apis.ts delete getWorldTime, getNews, getJoke, getDadJoke, getQuote, getAdvice, getAffirmation, getDictionary, getCountry, getCatFact, getDogImage, getNASA, getISS, getSpaceX, getNumberFact, getRecipe, getCocktail, getPokemon, getTrivia, getTrending, searchAmazon, getScienceFact, getRiddle, getQRCode, solveMath, translateText; telegram.ts delete sendRichResponse; utils.ts delete getYouTubeLink. KEEP: generateImage (auth.ts uses it), getWeather/getCurrency/getCrypto/getStockPrice/getMovie/getTVShow (tool backends), searchGif.
+6. tsc → v12.31.0 → deploy → /health → update CLAUDE.md (12 tools, router gone) → commit locally.
+
+**Verified reference map (greps done):** detectIntent only called from index.ts:330; sendRichResponse only in commands searchKw branch; getYouTubeLink only in commands; generateImage used by auth.ts:53 (KEEP).
+
+### Original direction note (context) — KILL THE KEYWORD ROUTER
 **Decision:** Bizli must be brain-first like ChatGPT, for every language — with her Snapchat-AI short/simple voice. The `detectIntent()` keyword layer (commands.ts) is WRONG for a global product:
 - It's English-only regex running BEFORE the brain → English users get hijacked into canned API dumps (no persona, no brevity); non-English users skip it and get the proper brain+tools path. Inconsistent by language = not global.
 - It answers from pasted regex logic; the model is already trained — tools exist to give it REAL live data on demand, model-invoked.

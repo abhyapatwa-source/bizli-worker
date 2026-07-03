@@ -131,6 +131,28 @@ export async function getWorldTime(location: string): Promise<string> {
   } catch { return ""; }
 }
 
+// Stock price via Yahoo Finance — no API key needed. Tool backend for get_stock_price.
+export async function getStockPrice(symbol: string): Promise<string> {
+  try {
+    const s = symbol.toUpperCase().replace(/[^A-Z0-9.^]/g, "");
+    const res = await fetchTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${s}?interval=1d&range=1d`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    }, 6000);
+    if (!res || !res.ok) return "";
+    const data = await res.json() as any;
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) return "";
+    const price = meta.regularMarketPrice.toFixed(2);
+    const prev = meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice;
+    const change = (meta.regularMarketPrice - prev).toFixed(2);
+    const pct = ((meta.regularMarketPrice - prev) / prev * 100).toFixed(2);
+    const arrow = parseFloat(change) >= 0 ? "📈" : "📉";
+    const name = meta.shortName || meta.longName || s;
+    const currency = meta.currency || "USD";
+    return `${arrow} ${name} (${meta.symbol})\n💰 ${currency} ${price}\n${arrow} ${parseFloat(change) >= 0 ? "+" : ""}${change} (${parseFloat(change) >= 0 ? "+" : ""}${pct}%) today`;
+  } catch { return ""; }
+}
+
 export async function getCurrency(from: string, to: string, amount: number): Promise<string> {
   // Primary + fallback sources, same response shape (rates map). Both free, no key.
   const sources = [

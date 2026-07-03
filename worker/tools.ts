@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { searchGif } from './utils';
 import { sendTelegramAnimation } from './telegram';
 import { searchWeb, cleanSearchQuery, readUrl } from './search';
-import { getWeather, getCurrency, getMovie, getTVShow } from './apis';
+import { getWeather, getCurrency, getMovie, getTVShow, getCrypto, getStockPrice } from './apis';
 
 export const BIZLI_TOOLS = [
   {
