@@ -4,7 +4,7 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v12.29.0";
+export const BIZLI_VERSION = "v12.29.1";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -44,14 +44,17 @@ const GEMINI_CANDIDATE_POOL = [
 
 // Cerebras — 2nd independent free provider (OpenAI-compatible). Auto-discovered
 // from its /models endpoint; preference order below picks the strongest live ones.
-const CEREBRAS_DEFAULT_MODELS = ["llama-3.3-70b", "llama3.1-8b"];
+// Direct-answer models first (reliable non-empty content); reasoning models
+// (gpt-oss, zai-glm) are kept as secondary since they can burn the token budget
+// on hidden reasoning and return empty content. llama/qwen kept for other accounts.
+const CEREBRAS_DEFAULT_MODELS = ["gemma-4-31b", "gpt-oss-120b", "zai-glm-4.7"];
 const CEREBRAS_PREFERENCE = [
+  "gemma-4-31b",
   "llama-3.3-70b",
-  "gpt-oss-120b",
-  "qwen-3-235b-a22b-instruct-2507",
-  "qwen-3-32b",
   "llama-4-scout-17b-16e-instruct",
-  "llama-4-maverick-17b-128e-instruct",
+  "qwen-3-32b",
+  "gpt-oss-120b",
+  "zai-glm-4.7",
   "llama3.1-8b",
 ];
 
@@ -577,7 +580,7 @@ export async function callCerebras(env: Env, messages: any[], systemExtra: strin
             model,
             messages: [{ role: "system", content: system }, ...messages],
             temperature: 0.75,
-            max_tokens: 512,
+            max_tokens: 800,
           }),
         }, 8000);
         if (!res) continue;
