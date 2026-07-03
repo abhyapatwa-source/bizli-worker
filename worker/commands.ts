@@ -1,13 +1,30 @@
 import type { Env } from './types';
 import { db } from './db';
-import { getGroqKeys, getGeminiKeys, getCerebrasKeys, getOpenRouterKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB } from './utils';
+import { getGroqKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB } from './utils';
 import { sendTelegram, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAuthStateHelper, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
 import { searchWeb } from './search';
 import { checkRateLimit, RATE_LIMITS } from './tools';
-import { callGroq, BIZLI_VERSION, getGroqStatus } from './brain';
-import { runHelpMenu, runAdminMenu, runAgentCommand } from './admin';
+import { callGroq, getGroqStatus } from './brain';
+import { runHelpMenu, runAdminMenu, runAgentCommand, approveUser, denyUser, blockUser } from './admin';
 
+
+// Shared single implementations — used by handleUserCommand (logged-in users,
+// all platforms) AND the index.ts pre-auth intercept (works during maintenance
+// and for logged-out users). Never inline-copy these flows again.
+export async function sendForgotPinRequest(env: Env, chatId: string, platform: string, u: any): Promise<void> {
+  await sendTelegram(env, env.ADMIN_CHAT_ID,
+    `🔑 PIN Reset\n\nName: ${u?.display_name || "Unknown"}\nCode: ${u?.identity_code || "N/A"}\nGmail: ${u?.gmail || "N/A"}\nID: ${u?.id || chatId}\nPlatform: ${platform}`,
+    { reply_markup: { inline_keyboard: [[{ text: "🔑 Reset PIN", callback_data: `resetpin:${u?.id || chatId}` }, { text: "💬 Reply", callback_data: `reply:${chatId}` }]] } }
+  );
+  await sendTelegram(env, chatId, "request sent! admin will reset your PIN shortly 🙏");
+}
+
+export async function sendSupportPrompt(env: Env, chatId: string): Promise<void> {
+  await sendTelegram(env, chatId, "what do you need help with?",
+    { reply_markup: { inline_keyboard: [[{ text: "🔑 PIN Issue", callback_data: `support_cat:${chatId}|pin` }, { text: "🔐 Can't Login", callback_data: `support_cat:${chatId}|login` }, { text: "💬 Other", callback_data: `support_cat:${chatId}|other` }]] } }
+  );
+}
 
 export async function detectIntent(env: Env, text: string, chatId: string, userId: string): Promise<boolean> {
   const lower = text.toLowerCase().trim();
@@ -82,8 +99,8 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     if (!userId) { await sendTelegram(env, fromId, "please log in first"); return; }
     const directCmds: Record<string, string> = {
       details: "!mydetails", memories: "!memories", greetings: "!greetings",
-      changepin: "!changepin", support: "!support", forgotpin: "!forgotpin",
-      recover: "!recover", status: "!status", usage: "!myusage",
+      settings: "!settings", changepin: "!changepin", support: "!support",
+      forgotpin: "!forgotpin", recover: "!recover", status: "!status", usage: "!myusage",
     };
     if (directCmds[cmd]) { await handleUserCommand(env, fromId, directCmds[cmd], userId); return; }
     const hints: Record<string, string> = {
@@ -137,6 +154,48 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     return;
   }
 
+  if (data === "st:greet_on" || data === "st:greet_off") {
+    const identity = await db(env, `platform_identities?platform=eq.telegram&platform_id=eq.${fromId}&limit=1`);
+    const uid = identity?.[0]?.user_id;
+    if (!uid) { await answerCallback(env, cbId, "please log in first"); return; }
+    await answerCallback(env, cbId, "✅");
+    if (data === "st:greet_on") {
+      await env.BIZLI_MEMORY.delete(`greet_off_${uid}`);
+      await sendTelegram(env, fromId, "morning and night messages are back on 🌅");
+    } else {
+      await env.BIZLI_MEMORY.put(`greet_off_${uid}`, "1", { expirationTtl: 31536000 });
+      await sendTelegram(env, fromId, "got it — no more morning/night messages. !settings to turn them back on");
+    }
+    return;
+  }
+
+  if (data.startsWith("delme:")) {
+    const uid = data.slice("delme:".length);
+    const identity = await db(env, `platform_identities?platform=eq.telegram&platform_id=eq.${fromId}&limit=1`);
+    if (!identity?.[0]?.user_id || identity[0].user_id !== uid) {
+      await answerCallback(env, cbId, "that's not your account");
+      return;
+    }
+    await answerCallback(env, cbId, "");
+    // Children first (FK), then the user row, then KV traces.
+    await db(env, `memories?user_id=eq.${uid}`, "DELETE");
+    await db(env, `messages?user_id=eq.${uid}`, "DELETE");
+    await db(env, `feedback?user_id=eq.${uid}`, "DELETE");
+    await db(env, `platform_identities?user_id=eq.${uid}`, "DELETE");
+    await db(env, `users?id=eq.${uid}`, "DELETE");
+    const kvKeys = [`history_${uid}`, `tz_${uid}`, `greet_off_${uid}`, `lang_${uid}`, `logged_out_${fromId}`, `auth_${fromId}`, `greeted_${fromId}`,
+      `rl_image_${fromId}`, `rl_search_${fromId}`, `rl_research_${fromId}`, `rl_vision_${fromId}`];
+    await Promise.all(kvKeys.map(k => env.BIZLI_MEMORY.delete(k).catch(() => {})));
+    await sendTelegram(env, fromId, "done — everything's deleted. it was really nice knowing you 💛 if you ever want to come back, just send /start");
+    await sendTelegram(env, env.ADMIN_CHAT_ID, `🗑️ Self-deletion: a user deleted their account + all data (id ${uid}).`);
+    return;
+  }
+  if (data === "delme_no") {
+    await answerCallback(env, cbId, "💛");
+    await sendTelegram(env, fromId, "phew — staying right here with you 💛");
+    return;
+  }
+
   if (fromId !== env.ADMIN_CHAT_ID) { await answerCallback(env, cbId, "Not authorized."); return; }
 
   const colonIdx = data.indexOf(":");
@@ -158,24 +217,15 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
   }
 
   if (action === "approve") {
-    await db(env, `users?id=eq.${payload}`, "PATCH", { status: "approved", is_blocked: false });
-    const id = await db(env, `platform_identities?user_id=eq.${payload}&limit=1`);
-    if (id?.[0]) {
-      await sendTelegram(env, id[0].platform_id, "you're approved! 🎉\n\nSet a 4-digit PIN to log in on any platform:");
-      await setAuthStateHelper(env, id[0].platform_id, { step: "set_pin", userId: payload });
-    }
+    await approveUser(env, payload);
     await answerCallback(env, cbId, "✅ Approved");
     await sendTelegram(env, fromId, `✅ Approved`);
   } else if (action === "decline") {
-    await db(env, `users?id=eq.${payload}`, "PATCH", { status: "denied" });
-    const id = await db(env, `platform_identities?user_id=eq.${payload}&limit=1`);
-    if (id?.[0]) await sendTelegram(env, id[0].platform_id, "sorry, your request wasn't approved.");
+    await denyUser(env, payload);
     await answerCallback(env, cbId, "❌ Declined");
     await sendTelegram(env, fromId, "❌ Declined");
   } else if (action === "block") {
-    await db(env, `users?id=eq.${payload}`, "PATCH", { is_blocked: true, status: "denied" });
-    const id = await db(env, `platform_identities?user_id=eq.${payload}&limit=1`);
-    if (id?.[0]) await sendTelegram(env, id[0].platform_id, "you've been blocked.");
+    await blockUser(env, payload);
     await answerCallback(env, cbId, "🚫 Blocked");
     await sendTelegram(env, fromId, "🚫 Blocked");
   } else if (action === "resetpin") {
@@ -219,86 +269,24 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     return true;
   }
 
-  if (lower === "!ping") { const s = Date.now(); await db(env, "users?limit=1"); await sendTelegram(env, chatId, `🏓 pong! ${Date.now()-s}ms`); return true; }
-
   if (lower === "!status") {
+    // Anatomy-only for users — never expose provider names, key names, or key counts.
     const keys = getGroqKeys(env);
     const gStatus = await getGroqStatus(env);
     const now = Date.now();
     const ready = keys.filter((_, i) => (gStatus.cooldowns[i] || 0) <= now).length;
-    const cooling = keys.length - ready;
-    const hist = (await getKVHistory(env, userId)).length;
+    const healthy = keys.length === 0 ? false : ready / keys.length >= 0.3;
     const mems = await getUserMemories(env, userId);
-    const gemKeys = getGeminiKeys(env, "lab").length;
-    const cerKeys = getCerebrasKeys(env).length;
-    const orKeys = getOpenRouterKeys(env).length;
-    const groqBar = "🟢".repeat(ready) + "🔴".repeat(cooling);
-    const cerBar = "🟢".repeat(cerKeys) + "⚫".repeat(Math.max(0, 5 - cerKeys));
-    const gemBar = "🟢".repeat(gemKeys) + "⚫".repeat(Math.max(0, 5 - gemKeys));
+    const hist = (await getKVHistory(env, userId)).length;
     const userTz = (await env.BIZLI_MEMORY.get(`tz_${userId}`)) || "UTC";
     const localTime = new Date().toLocaleTimeString("en-US", { timeZone: userTz, hour: "2-digit", minute: "2-digit", hour12: true });
     const statusMsg =
-      `🧠 Bizli Brain Status — ${BIZLI_VERSION}\n\n` +
-      `🧠 Frontal Cortex (Groq): ${groqBar}\n   ${ready}/${keys.length} neurons active${cooling ? ` · ${cooling} cooling` : ""}\n\n` +
-      `⚡ Motor Cortex (Cerebras): ${cerBar}\n   ${cerKeys}/5 circuits ready · steps in if Groq rests\n\n` +
-      `🌐 Parietal Lobe (OpenRouter): ${orKeys ? "🟢" : "⚫"} ${orKeys} key${orKeys !== 1 ? "s" : ""} · free-model pool backup\n\n` +
-      `🫀 Brainstem (Worker AI): 🟢 always on · last resort\n\n` +
-      `🧬 Temporal Lobe (Gemini): ${gemBar}\n   ${gemKeys}/5 circuits · Lab diagnostics only\n\n` +
-      `💾 Hippocampus: ${mems.length} memories stored\n` +
-      `💬 Short-term: ${hist}/15 messages in context\n` +
-      `🕐 Your time: ${localTime} (${userTz})\n\n` +
-      `_Type !timezone to set your local time_`;
+      (healthy ? `💛 feeling great!\n\n🧠 brain: all regions healthy\n` : `💛 I'm here! thinking a little slower than usual rn, but fully awake\n\n🧠 brain: some regions resting\n`) +
+      `💾 memory: ${mems.length} things I remember about you\n` +
+      `💬 short-term: ${hist}/15 messages in my head\n` +
+      `🕐 your time: ${localTime} (${userTz})\n\n` +
+      `_!settings to change timezone & greetings_`;
     await sendTelegram(env, chatId, statusMsg);
-    return true;
-  }
-
-  if (lower === "!brains") {
-    if (!await isAdminSession(env, chatId)) {
-      await sendTelegram(env, chatId, "🔒 Admin only — use !admin <password> first.");
-      return true;
-    }
-    const keyNames = ["Alpha","Bravo","Charlie","Delta","Echo","Foxtrot","Golf","Hotel","India","Juliet","Kilo","Lima","Mike","November","Oscar","Papa","Quebec","Romeo","Sierra","Tango","Uniform"];
-    const keys = getGroqKeys(env);
-    const gStatus = await getGroqStatus(env);
-    const now = Date.now();
-    const msAgo = (ms: number) => {
-      const diff = now - ms;
-      if (diff < 60000) return `${Math.round(diff / 1000)}s ago`;
-      return `${Math.round(diff / 60000)}m ago`;
-    };
-    const lastBrainsRaw = await env.BIZLI_MEMORY.get("last_brains");
-    const lastBrains: { brain: string; key?: number; ts: number }[] = lastBrainsRaw ? JSON.parse(lastBrainsRaw) : [];
-    const brainLog = lastBrains.length
-      ? lastBrains.map((e, idx) => {
-          const keyLabel = e.key !== undefined ? ` · key ${e.key + 1} (${keyNames[e.key] || e.key})` : "";
-          return `  ${idx + 1}. ${e.brain}${keyLabel} — ${msAgo(e.ts)}`;
-        }).join("\n")
-      : "  (no messages recorded yet)";
-    const groqKeyLines = keys.map((_, i) => {
-      const cd = gStatus.cooldowns[i] || 0;
-      const name = keyNames[i] || String(i);
-      if (cd <= now) return `  ${i + 1} ${name}: ✅ READY`;
-      const remaining = cd - now;
-      if (remaining > 60_000) {
-        const h = Math.floor(remaining / 3600000);
-        const m = Math.ceil((remaining % 3600000) / 60000);
-        return `  ${i + 1} ${name}: 🔴 TPD — ready in ${h}h ${m}m`;
-      }
-      return `  ${i + 1} ${name}: ⏳ RPM — ready in ${Math.ceil(remaining / 1000)}s`;
-    }).join("\n");
-    const gemCount = getGeminiKeys(env, "lab").length;
-    const cerCount = getCerebrasKeys(env).length;
-    const orCount = getOpenRouterKeys(env).length;
-    const msg =
-      `🧠 Bizli Brains — Live View\n\n` +
-      `🔵 Last 5 messages driven by:\n${brainLog}\n\n` +
-      `🧠 Groq Neurons (${keys.length} configured):\n${groqKeyLines}\n\n` +
-      `⚡ Cerebras (${cerCount} key${cerCount !== 1 ? "s" : ""} configured): ✅ fallback #1 — auto-discovered models\n` +
-      `🌐 OpenRouter (${orCount} key${orCount !== 1 ? "s" : ""} configured): ✅ fallback #2 — free-model pool\n` +
-      `🫀 Brainstem (Worker AI): ✅ standby — last resort\n` +
-      `🧬 Gemini (${gemCount} key${gemCount !== 1 ? "s" : ""} configured): 🔬 Lab diagnostics only, never chats\n\n` +
-      `🕐 ${new Date().toUTCString()}`;
-    await sendTelegram(env, chatId, msg);
     return true;
   }
 
@@ -336,7 +324,7 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     await sendTelegram(env, chatId, "morning and night messages are back on");
     return true;
   }
-  if (lower === "!greetings") {
+  if (lower === "!greetings" || lower === "!settings") {
     const off = await env.BIZLI_MEMORY.get(`greet_off_${userId}`);
     const explicitTz = await env.BIZLI_MEMORY.get(`tz_${userId}`);
     const u = (await db(env, `users?id=eq.${userId}&select=city&limit=1`))?.[0];
@@ -344,12 +332,18 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     const lang = await env.BIZLI_MEMORY.get(`lang_${userId}`);
     const inferredTz = lang ? inferTimezoneFromLangCode(lang) : "";
     const activeTz = explicitTz || cityTz || inferredTz;
-    const tzSource = explicitTz ? "" : cityTz ? " (from your city)" : inferredTz ? " (auto-detected)" : "";
+    const tzSource = explicitTz ? "" : cityTz ? "from your city" : inferredTz ? "auto-detected" : "";
     await sendTelegram(env, chatId,
-      `Good morning/night messages: ${off ? "OFF" : "ON"}\n` +
-      `Timezone: ${activeTz || "not detected yet"}\n${tzSource ? `(${tzSource.trim()})\n` : ""}` +
-      `\n• !greetings on/off — toggle messages\n• !editlocation <city, country> — update your city\n• !timezone set <zone> — set manually`
-    );
+      `⚙️ Settings\n\n` +
+      `🕐 Timezone: ${activeTz || "not set (UTC)"}${tzSource ? ` (${tzSource})` : ""}\n` +
+      `🌅 Daily greetings: ${off ? "OFF" : "ON"}\n\n` +
+      `To set timezone, type:\n!timezone set Asia/Kolkata`,
+      { reply_markup: { inline_keyboard: [
+        [off
+          ? { text: "🌅 Turn greetings ON", callback_data: "st:greet_on" }
+          : { text: "🌙 Turn greetings OFF", callback_data: "st:greet_off" }],
+        [{ text: "📍 Update my city", callback_data: "hcmd:editloc" }],
+      ] } });
     return true;
   }
 
@@ -372,7 +366,13 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     const dobLine = u?.date_of_birth ? `\nDate of Birth: ${u.date_of_birth} (Age: ${calculateAge(u.date_of_birth)})` : "";
     const cityLine = u?.city ? `\nLocation: ${u.city}` : "";
-    await sendTelegram(env, chatId, `👤 Your Details\n\nName: ${u?.display_name}\nCode: ${u?.identity_code}\nGmail: ${u?.gmail || "N/A"}${dobLine}${cityLine}\nStatus: ${u?.status}\n\nSave your code — needed to login anywhere.`);
+    await sendTelegram(env, chatId,
+      `👤 Your Details\n\nName: ${u?.display_name}\nCode: ${u?.identity_code}\nGmail: ${u?.gmail || "N/A"}${dobLine}${cityLine}\nStatus: ${u?.status}\n\nSave your code — needed to login anywhere.\n\nTap below to edit anything 👇`,
+      { reply_markup: { inline_keyboard: [
+        [{ text: "✏️ Name", callback_data: "hcmd:editname" }, { text: "📧 Email", callback_data: "hcmd:editgmail" }],
+        [{ text: "📅 DOB", callback_data: "hcmd:editdob" }, { text: "📍 Location", callback_data: "hcmd:editloc" }],
+        [{ text: "🔑 Change PIN", callback_data: "hcmd:changepin" }],
+      ] } });
     return true;
   }
 
@@ -416,8 +416,10 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
       await sendTelegram(env, chatId, "please enter a valid city and country (e.g. \"Mumbai, India\")");
       return true;
     }
+    const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     await db(env, `users?id=eq.${userId}`, "PATCH", { city: newCity });
     await sendTelegram(env, chatId, `location updated to: ${newCity}`);
+    await sendTelegram(env, env.ADMIN_CHAT_ID, `✏️ Location change: ${u?.identity_code} | ${u?.city || "none"} → ${newCity}`);
     return true;
   }
   if (lower === "!editlocation") { await sendTelegram(env, chatId, "usage: !editlocation <city, country>  e.g. !editlocation Mumbai, India"); return true; }
@@ -454,17 +456,12 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
 
   if (lower === "!forgotpin") {
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
-    await sendTelegram(env, env.ADMIN_CHAT_ID,
-      `🔑 PIN Reset\n\nName: ${u?.display_name}\nCode: ${u?.identity_code}\nGmail: ${u?.gmail || "N/A"}\nID: ${userId}\nPlatform: ${platform}`,
-      { reply_markup: { inline_keyboard: [[{ text: "🔑 Reset PIN", callback_data: `resetpin:${userId}` }, { text: "💬 Reply", callback_data: `reply:${chatId}` }]] } }
-    );
-    await sendTelegram(env, chatId, "request sent! admin will reset your PIN shortly 🙏"); return true;
+    await sendForgotPinRequest(env, chatId, platform, u || { id: userId });
+    return true;
   }
 
   if (lower === "!support") {
-    await sendTelegram(env, chatId, "what do you need help with?",
-      { reply_markup: { inline_keyboard: [[{ text: "🔑 PIN Issue", callback_data: `support_cat:${chatId}|pin` }, { text: "🔐 Can't Login", callback_data: `support_cat:${chatId}|login` }, { text: "💬 Other", callback_data: `support_cat:${chatId}|other` }]] } }
-    );
+    await sendSupportPrompt(env, chatId);
     return true;
   }
 
@@ -515,6 +512,16 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     await env.BIZLI_MEMORY.put(`logged_out_${chatId}`, "1", { expirationTtl: 2592000 });
     await sendTelegram(env, chatId, "logged out 🔒 tap below whenever you want to come back 👇",
       { reply_markup: { inline_keyboard: [[{ text: "🔑 Log in", callback_data: `start_login:${chatId}` }]] } });
+    return true;
+  }
+
+  if (lower === "!deleteme") {
+    await sendTelegram(env, chatId,
+      "this permanently deletes your account, memories, and chat history — everything, no undo 💔\n\nare you sure?",
+      { reply_markup: { inline_keyboard: [
+        [{ text: "🗑️ Yes, delete everything", callback_data: `delme:${userId}` }],
+        [{ text: "💛 No, keep my account", callback_data: "delme_no" }],
+      ] } });
     return true;
   }
 

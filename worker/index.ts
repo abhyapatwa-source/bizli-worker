@@ -42,8 +42,8 @@ import { callGroq, groqExhausted, autoExtractMemory, sanitizePersonaLeaks, appen
 import { checkRateLimit } from './tools';
 import { runAgents } from './agents';
 import { handleAdmin } from './admin';
-import { detectIntent, handleUserCommand, handleCallback } from './commands';
-import { handleAuth } from './auth';
+import { detectIntent, handleUserCommand, handleCallback, sendForgotPinRequest, sendSupportPrompt } from './commands';
+import { handleAuth, startRecoverFlow } from './auth';
 import { handleGroupMessage } from './group';
 import { handleFacebook, handleFacebookVerify } from './facebook';
 import { handleDiscord, handleDiscordRegister } from './discord';
@@ -62,6 +62,20 @@ export default {
     if (request.method === "GET" && url.pathname === "/discord-register") return handleDiscordRegister(request, env);
     if (request.method === "GET" && url.pathname === "/health") return new Response(JSON.stringify({ status: "ok", version: BIZLI_VERSION }), { headers: { "Content-Type": "application/json" } });
     if (request.method === "GET" && url.pathname === "/admin/stats") return handleAdminStats(request, env);
+    if (request.method === "GET" && url.pathname === "/admin/set-menu") {
+      // One-time: register the native Telegram "/" command menu.
+      if (url.searchParams.get("key") !== env.ADMIN_PASSWORD) return new Response("unauthorized", { status: 401 });
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commands: [
+          { command: "help", description: "all my commands" },
+          { command: "settings", description: "timezone & daily greetings" },
+          { command: "status", description: "am I feeling okay?" },
+          { command: "support", description: "reach my developer" },
+        ] }),
+      });
+      return new Response(await res.text(), { headers: { "Content-Type": "application/json" } });
+    }
     if (request.method === "GET" && url.pathname === "/dashboard") return handleDashboard(request, env);
     if (request.method === "GET" && url.pathname === "/chat") return new Response(CHAT_HTML, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
     if (request.method === "POST" && url.pathname === "/web-chat") return handleWebChat(request, env);
@@ -198,25 +212,26 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
     return new Response("ok");
   }
 
+  // Native / menu aliases (registered with Telegram via setMyCommands) → ! commands
+  {
+    const firstWord = text.trim().split(/\s+/)[0].toLowerCase().replace(/@[a-z0-9_]+$/i, "");
+    const slashAliases: Record<string, string> = { "/help": "!help", "/settings": "!settings", "/status": "!status", "/support": "!support" };
+    if (slashAliases[firstWord]) text = slashAliases[firstWord] + text.trim().slice(text.trim().split(/\s+/)[0].length);
+  }
+
   const lower = text.trim().toLowerCase();
   if (lower === "!forgotpin" || lower === "!recover" || lower === "!support" || lower.startsWith("!support ")) {
+    // Pre-auth intercept: these must work for logged-out users and during
+    // maintenance. Implementations are shared (commands.ts / auth.ts).
     const userInfo = await lookupUser(env, platform, chatId);
     if (lower === "!forgotpin") {
-      await sendTelegram(env, env.ADMIN_CHAT_ID,
-        `🔑 PIN Reset\n\nName: ${userInfo?.display_name || "Unknown"}\nCode: ${userInfo?.identity_code || "N/A"}\nGmail: ${userInfo?.gmail || "N/A"}\nPlatform: ${platform}\nChat ID: ${chatId}`,
-        { reply_markup: { inline_keyboard: [[{ text: "🔑 Reset PIN", callback_data: `resetpin:${userInfo?.id || chatId}` }, { text: "💬 Reply", callback_data: `reply:${chatId}` }]] } }
-      );
-      await sendTelegram(env, chatId, "request sent 🙏 admin will help shortly");
+      await sendForgotPinRequest(env, chatId, platform, userInfo);
     } else if (lower === "!recover") {
-      await setAuthStateHelper(env, chatId, { step: "recover_gmail" });
-      await sendTelegram(env, chatId, "enter the Gmail you registered with:");
+      await startRecoverFlow(env, chatId);
     } else if (lower === "!support") {
-      await sendTelegram(env, chatId, "what do you need help with?",
-        { reply_markup: { inline_keyboard: [[{ text: "🔑 PIN Issue", callback_data: `support_cat:${chatId}|pin` }, { text: "🔐 Can't Login", callback_data: `support_cat:${chatId}|login` }, { text: "💬 Other", callback_data: `support_cat:${chatId}|other` }]] } }
-      );
+      await sendSupportPrompt(env, chatId);
     } else {
-      const userInfo2 = await lookupUser(env, platform, chatId);
-      await sendSupportToAdmin(env, chatId, platform, "other", text.trim().slice(9).trim(), userInfo2);
+      await sendSupportToAdmin(env, chatId, platform, "other", text.trim().slice(9).trim(), userInfo);
       await sendTelegram(env, chatId, "support request sent 🙏");
     }
     return new Response("ok");

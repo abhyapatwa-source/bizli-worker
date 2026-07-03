@@ -4,9 +4,12 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-// v12.31.0 — BRAIN-FIRST: keyword router gone (image-gen flow only), 12 tools
-// (+crypto +stock), proactive Groq quota skip, ~700 lines of dead code removed.
-export const BIZLI_VERSION = "v12.31.0";
+// v12.32.0 — COMMAND REARRANGEMENT: flash-card help (single source of truth),
+// !settings/!deleteme/!agent quota/!agent test added; !ping/!brains/!stats/
+// !storage/!agent users removed; anatomy-only user !status (privacy);
+// dedup'd forgotpin/recover/support + approve/deny/block; / menu aliases;
+// hardcoded admin fallback password removed (fail closed).
+export const BIZLI_VERSION = "v12.32.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

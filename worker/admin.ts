@@ -3,7 +3,7 @@ import { db } from './db';
 import { getGroqKeys, getGeminiKeys, getCerebrasKeys, getOpenRouterKeys } from './utils';
 import { sendTelegram, editTelegramMessage, broadcastToTelegram, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAdminSession, lookupUser, setAuthStateHelper, getUserMemories } from './memory';
-import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, getActiveCerebrasModels, getActiveOpenRouterModels, probeAllProviders } from './brain';
+import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, getActiveCerebrasModels, getActiveOpenRouterModels, probeAllProviders, callGroq } from './brain';
 import { BIZLI_TOOLS } from './tools';
 import { runAgents } from './agents';
 
@@ -16,14 +16,112 @@ async function resolveUserId(env: Env, idOrCode: string): Promise<string | null>
   return trimmed;
 }
 
+// Shared user-action helpers — single implementation for both the typed
+// commands (!approve etc.) and the inline notification buttons.
+export async function approveUser(env: Env, uid: string): Promise<void> {
+  await db(env, `users?id=eq.${uid}`, "PATCH", { status: "approved", is_blocked: false });
+  const id = await db(env, `platform_identities?user_id=eq.${uid}&limit=1`);
+  if (id?.[0]) {
+    await sendTelegram(env, id[0].platform_id, "you're approved! 🎉\n\nSet a 4-digit PIN to log in on any platform:");
+    await setAuthStateHelper(env, id[0].platform_id, { step: "set_pin", userId: uid });
+  }
+}
+export async function denyUser(env: Env, uid: string): Promise<void> {
+  await db(env, `users?id=eq.${uid}`, "PATCH", { status: "denied" });
+  const id = await db(env, `platform_identities?user_id=eq.${uid}&limit=1`);
+  if (id?.[0]) await sendTelegram(env, id[0].platform_id, "sorry, your request wasn't approved.");
+}
+export async function blockUser(env: Env, uid: string): Promise<void> {
+  await db(env, `users?id=eq.${uid}`, "PATCH", { is_blocked: true, status: "denied" });
+  const id = await db(env, `platform_identities?user_id=eq.${uid}&limit=1`);
+  if (id?.[0]) await sendTelegram(env, id[0].platform_id, "you've been blocked.");
+}
+
+// ── Flash cards (BotFather style) ───────────────────────────────────────────
+// ONE source of truth per card. Help can never drift from reality again:
+// add/remove a command here when you add/remove its handler.
+type CardGroup = { group: string; items: [string, string][] };
+
+const USER_CARD: CardGroup[] = [
+  { group: "👤 Account", items: [
+    ["!mydetails", "your profile + edit buttons"],
+    ["!settings", "timezone & daily greetings"],
+    ["!logout", "log out"],
+  ] },
+  { group: "🧠 Memory", items: [
+    ["!remember <thing>", "I'll never forget it"],
+    ["!memories", "what I know about you"],
+    ["!forget <n>", "make me forget"],
+  ] },
+  { group: "🔍 Tools", items: [
+    ["!search <query>", "force a web search"],
+    ["!status", "am I feeling okay?"],
+    ["!myusage", "your daily limits"],
+  ] },
+  { group: "🆘 Help", items: [
+    ["!support <msg>", "reach my developer"],
+    ["!feedback <msg>", "tell us anything"],
+    ["!forgotpin", "PIN reset request"],
+    ["!deleteme", "delete my account & data"],
+  ] },
+];
+
+const ADMIN_CARD: CardGroup[] = [
+  { group: "🔐 ADMIN — PEOPLE", items: [
+    ["!users", "list everyone"],
+    ["!userdetails <id>", "one user's full info"],
+    ["!approve <id> · !deny <id>", "waitlist decisions"],
+    ["!block <id> · !unblock <id>", "ban controls"],
+    ["!memory <id> · !wipememory <id>", "view / erase memories"],
+    ["!msg <id> <text>", "DM one user"],
+    ["!broadcast <msg>", "message everyone"],
+    ["!close", "end reply mode"],
+  ] },
+  { group: "🤖 AGENT — SYSTEM", items: [
+    ["!agent status", "brain map + overview"],
+    ["!agent quota", "live key usage vs soft limits"],
+    ["!agent test", "canary-test the brain now"],
+    ["!agent models", "live model list"],
+    ["!agent refresh models", "probe all providers"],
+    ["!agent errors", "recent errors"],
+    ["!agent kv", "storage breakdown"],
+    ["!agent uptime", "version + uptime"],
+    ["!agent report", "daily health report"],
+    ["!agent tools", "list the 12 tools"],
+    ["!agent feedback", "user feedback summary"],
+    ["!agent fix lockouts", "clear PIN lockouts"],
+    ["!agent clear cache", "reset caches"],
+    ["!agent clear search", "clear search cache"],
+    ["!agent clear history <uid>", "wipe a chat history"],
+    ["!agent clear session <cid>", "reset an auth session"],
+    ["!agent broadcast test", "responsiveness check"],
+  ] },
+  { group: "🛠️ CONTROL", items: [
+    ["!maintenance on/off", "lock/unlock the bot"],
+    ["!vault", "Bizli's diary (admin menu → Vault)"],
+    ["!resetmypin", "reset your own PIN"],
+    ["!adminoff", "exit admin mode"],
+  ] },
+];
+
+function renderCard(title: string, card: CardGroup[], footer = ""): string {
+  return `${title}\n\n` +
+    card.map(g => `${g.group}\n` + g.items.map(([c, d]) => `${c} — ${d}`).join("\n")).join("\n\n") +
+    (footer ? `\n\n${footer}` : "");
+}
+
+export function adminCardText(): string {
+  return renderCard(`🔐 BIZLI ADMIN — ${BIZLI_VERSION}`, ADMIN_CARD);
+}
+
 const AGENT_PANEL_KEYBOARD = {
   inline_keyboard: [
-    [{ text: "🧠 Brain Map", callback_data: "agent:status" }, { text: "👥 Users", callback_data: "agent:users" }],
-    [{ text: "🗂️ KV", callback_data: "agent:kv" }, { text: "🔧 Tools", callback_data: "agent:tools" }],
-    [{ text: "🐛 Errors", callback_data: "agent:errors" }, { text: "🕐 Uptime", callback_data: "agent:uptime" }],
+    [{ text: "🧠 Brain Map", callback_data: "agent:status" }, { text: "📊 Quota", callback_data: "agent:quota" }],
+    [{ text: "🧪 Test brain", callback_data: "agent:test" }, { text: "🔧 Tools", callback_data: "agent:tools" }],
+    [{ text: "🐛 Errors", callback_data: "agent:errors" }, { text: "🗂️ KV", callback_data: "agent:kv" }],
     [{ text: "🔓 Fix lockouts", callback_data: "agent:fix lockouts" }, { text: "🧹 Clear cache", callback_data: "agent:clear cache" }],
     [{ text: "🔍 Clear search", callback_data: "agent:clear search" }, { text: "📋 Daily report", callback_data: "agent:report" }],
-    [{ text: "📊 Feedback", callback_data: "agent:feedback" }],
+    [{ text: "📊 Feedback", callback_data: "agent:feedback" }, { text: "🕐 Uptime", callback_data: "agent:uptime" }],
   ],
 };
 
@@ -171,70 +269,18 @@ export async function runAdminMenu(env: Env, chatId: string, cmd: string, messag
   }
 }
 
-const HELP_MENU_KEYBOARD = {
-  inline_keyboard: [
-    [{ text: "💬 Chatting & Fun", callback_data: "help:chat" }],
-    [{ text: "🔐 My Account", callback_data: "help:account" }],
-    [{ text: "🧠 Memory", callback_data: "help:memory" }],
-    [{ text: "🔍 Search & Info", callback_data: "help:search" }],
-    [{ text: "🆘 Help & Support", callback_data: "help:support" }],
-  ],
-};
-
-export function helpNav() {
-  return { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "help:menu" }, { text: "🏠 Main Menu", callback_data: "help:menu" }]] };
-}
-
+// One flash card (BotFather style), generated from USER_CARD.
+// Any old help:* button from previous messages also lands here gracefully.
 export async function runHelpMenu(env: Env, chatId: string, cmd: string, messageId?: number): Promise<void> {
-  const show = async (text: string, kb: any) => {
-    if (messageId) await editTelegramMessage(env, chatId, messageId, text, kb);
-    else await sendTelegram(env, chatId, text, { reply_markup: kb });
+  const text = renderCard("✨ BIZLI — COMMANDS", USER_CARD, "💬 Everything else? Just talk to me — weather, jokes, prices, photos, anything.");
+  const kb = {
+    inline_keyboard: [
+      [{ text: "👤 My Details", callback_data: "hcmd:details" }, { text: "⚙️ Settings", callback_data: "hcmd:settings" }],
+      [{ text: "🆘 Support", callback_data: "hcmd:support" }],
+    ],
   };
-
-  if (cmd === "menu" || cmd === "") {
-    await show("📋 What can I do?\n\nTap a category to explore 👇", HELP_MENU_KEYBOARD);
-  } else if (cmd === "chat") {
-    await show(
-      "💬 Chatting & Fun\n\nJust talk to me naturally! Try:\n" +
-      "• 'tell me a joke'\n• 'motivate me'\n• 'draw me a sunset'\n" +
-      "• 'recipe for pasta'\n• 'NASA space pic'\n\n" +
-      "📸 Send me a photo and I'll tell you what I see!",
-      helpNav());
-  } else if (cmd === "account") {
-    await show("🔐 My Account\n\nTap to run or get usage:", {
-      inline_keyboard: [
-        [{ text: "👤 My Details", callback_data: "hcmd:details" }, { text: "✏️ Edit Name", callback_data: "hcmd:editname" }],
-        [{ text: "📧 Edit Email", callback_data: "hcmd:editgmail" }, { text: "📅 Edit DOB", callback_data: "hcmd:editdob" }],
-        [{ text: "📍 Edit Location", callback_data: "hcmd:editloc" }, { text: "🌅 Greetings", callback_data: "hcmd:greetings" }],
-        [{ text: "🔑 Change PIN", callback_data: "hcmd:changepin" }, { text: "🚪 Logout", callback_data: "hcmd:logout" }],
-        [{ text: "⬅️ Back", callback_data: "help:menu" }, { text: "🏠 Main Menu", callback_data: "help:menu" }],
-      ]
-    });
-  } else if (cmd === "memory") {
-    await show("🧠 Memory\n\nI remember what matters to you:", {
-      inline_keyboard: [
-        [{ text: "🧠 My Memories", callback_data: "hcmd:memories" }, { text: "💾 Remember Something", callback_data: "hcmd:remember" }],
-        [{ text: "🗑️ Forget Something", callback_data: "hcmd:forget" }],
-        [{ text: "⬅️ Back", callback_data: "help:menu" }, { text: "🏠 Main Menu", callback_data: "help:menu" }],
-      ]
-    });
-  } else if (cmd === "search") {
-    await show("🔍 Search & Info\n\nJust ask me anything — weather, news, prices, movies, current events!", {
-      inline_keyboard: [
-        [{ text: "🔍 Web Search", callback_data: "hcmd:search" }],
-        [{ text: "⬅️ Back", callback_data: "help:menu" }, { text: "🏠 Main Menu", callback_data: "help:menu" }],
-      ]
-    });
-  } else if (cmd === "support") {
-    await show("🆘 Help & Support", {
-      inline_keyboard: [
-        [{ text: "📬 Contact Admin", callback_data: "hcmd:support" }, { text: "💬 Send Feedback", callback_data: "hcmd:feedback" }],
-        [{ text: "🔓 Forgot PIN", callback_data: "hcmd:forgotpin" }, { text: "🔄 Recover Account", callback_data: "hcmd:recover" }],
-        [{ text: "⚡ System Status", callback_data: "hcmd:status" }, { text: "📊 My Usage", callback_data: "hcmd:usage" }],
-        [{ text: "⬅️ Back", callback_data: "help:menu" }, { text: "🏠 Main Menu", callback_data: "help:menu" }],
-      ]
-    });
-  }
+  if (messageId) await editTelegramMessage(env, chatId, messageId, text, kb);
+  else await sendTelegram(env, chatId, text, { reply_markup: kb });
 }
 
 export async function runAgentCommand(env: Env, chatId: string, agentCmd: string, messageId?: number): Promise<void> {
@@ -311,16 +357,41 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     const users = await db(env, "users?select=id");
     for (const u of users || []) { await env.BIZLI_MEMORY.delete(`pin_lock_${u.id}`); await env.BIZLI_MEMORY.delete(`pin_att_${u.id}`); }
     await out("✅ all lockouts cleared", false);
-  } else if (agentCmd === "users" || agentCmd === "active") {
-    const users = await db(env, "users?order=last_active.desc&limit=10");
-    if (!users?.length) { await sendTelegram(env, chatId, "no users."); return; }
-    const lines = users.map((u: any) => {
-      const status = u.is_blocked ? "🚫" : u.status === "approved" ? "✅" : u.status === "waitlist" ? "⏳" : "❌";
-      const last = u.last_active ? new Date(u.last_active).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "short", timeStyle: "short" }) : "never";
-      return `${status} ${u.display_name || "unnamed"} (${u.identity_code}) — last: ${last}`;
-    });
-    await out(`👥 Recent activity:\n\n${lines.join("\n")}`, false);
-  } else if (agentCmd === "kv" || agentCmd === "memory usage") {
+  } else if (agentCmd === "quota") {
+    const keys = getGroqKeys(env);
+    const gStatus = await getGroqStatus(env);
+    const now = Date.now();
+    // Aggregate the per key+model counters up to key level for a readable view.
+    const perKey = keys.map(() => ({ d: 0, m: 0, mT: 0 }));
+    for (const [combo, q] of Object.entries(gStatus.q || {})) {
+      const idx = parseInt(combo.split("_")[0]);
+      if (isNaN(idx) || !perKey[idx]) continue;
+      if (now - q.dStart < 86_400_000) perKey[idx].d += q.d;
+      if (now - q.mStart < 60_000) { perKey[idx].m += q.m; perKey[idx].mT += q.mT; }
+    }
+    const totalDay = perKey.reduce((s, k) => s + k.d, 0);
+    const active = perKey.map((k, i) => ({ i, ...k })).filter(k => k.d > 0);
+    const lines = active.length
+      ? active.map(k => `  key ${k.i + 1}: ${k.d} today${k.m ? ` · ${k.m} req / ${k.mT} tok this min` : ""}`).join("\n")
+      : "  (no usage recorded yet — counters fill as messages flow)";
+    await out(
+      `📊 Groq quota — live counters\n` +
+      `soft limits per key+model: 25/min · 5500 tok/min · 900/day\n\n` +
+      `${lines}\n\n` +
+      `Σ today: ${totalDay} requests across ${keys.length} keys\n` +
+      `⚡ Cerebras / 🌐 OpenRouter: reactive fallbacks (no proactive counters)`,
+      false);
+  } else if (agentCmd === "test") {
+    const t0 = Date.now();
+    let reply = "";
+    try { reply = await callGroq(env, [{ role: "user", content: "Canary check — reply with one short friendly line." }], ""); } catch {}
+    const ms = Date.now() - t0;
+    const lastRaw = await env.BIZLI_MEMORY.get("last_brains");
+    let provider = "unknown";
+    try { const arr = lastRaw ? JSON.parse(lastRaw) : []; if (arr[0]?.brain) provider = arr[0].brain; } catch {}
+    if (reply) await out(`🧪 canary PASSED — ${ms}ms via ${provider}\n\nreply: "${reply.slice(0, 150)}"`, false);
+    else await out(`🧪 canary FAILED after ${ms}ms — brain returned nothing. check !agent errors`, false);
+  } else if (agentCmd === "kv") {
     const list = await env.BIZLI_MEMORY.list();
     const keys = list.keys || [];
     const groups: Record<string, number> = {};
@@ -330,7 +401,7 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     }
     const lines = Object.entries(groups).sort((a, b) => b[1] - a[1]).map(([k, v]) => `  ${k}_*: ${v}`);
     await out(`🗂️ KV keys: ${keys.length} total\n\n${lines.join("\n") || "(empty)"}`, false);
-  } else if (agentCmd === "errors" || agentCmd === "logs") {
+  } else if (agentCmd === "errors") {
     const errRaw = await env.BIZLI_MEMORY.get("recent_errors");
     if (!errRaw) { await out("✅ no recent errors logged", false); }
     else {
@@ -428,24 +499,8 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     ];
     await out(lines.join("\n"), false);
   } else {
-    await out(
-      "🏥 Bizli Agent Commands:\n\n" +
-      "!agent status — full system overview\n" +
-      "!agent models — show active model list\n" +
-      "!agent refresh models — probe & auto-update models\n" +
-      "!agent users — recent user activity\n" +
-      "!agent kv — KV storage breakdown\n" +
-      "!agent errors — recent error log\n" +
-      "!agent uptime — system uptime info\n" +
-      "!agent report — daily health report\n" +
-      "!agent fix lockouts — clear PIN lockouts\n" +
-      "!agent clear cache — reset all caches\n" +
-      "!agent clear history <user_id> — clear chat\n" +
-      "!agent clear session <chat_id> — clear auth\n" +
-      "!agent tools — list all tools\n" +
-      "!agent feedback — 👍/👎 + text feedback summary\n" +
-      "!agent broadcast test — check agent responsiveness",
-      false);
+    // Unknown subcommand → the auto-generated admin card (always in sync).
+    await out(adminCardText(), true);
   }
 }
 
@@ -457,10 +512,11 @@ export async function handleAdmin(env: Env, chatId: string, text: string): Promi
     const pass = trimmed.slice(7).trim();
     const lockVal = await env.BIZLI_MEMORY.get(`admin_lock_${chatId}`);
     if (lockVal && Date.now() < parseInt(lockVal)) { await sendTelegram(env, chatId, "locked 30 min."); return true; }
-    if (pass === (env.ADMIN_PASSWORD || "06062024")) {
+    // Fail closed: no hardcoded fallback — if the secret is unset, nobody gets in.
+    if (env.ADMIN_PASSWORD && pass === env.ADMIN_PASSWORD) {
       await setAdminSession(env, chatId);
       await env.BIZLI_MEMORY.delete(`admin_att_${chatId}`);
-      await sendTelegram(env, chatId, "🔓 Admin mode (15 min)", { reply_markup: ADMIN_MENU_KEYBOARD });
+      await sendTelegram(env, chatId, `🔓 Admin mode (15 min)\n\n${adminCardText()}`, { reply_markup: ADMIN_MENU_KEYBOARD });
     } else {
       const att = parseInt(await env.BIZLI_MEMORY.get(`admin_att_${chatId}`) || "0") + 1;
       if (att >= 3) { await env.BIZLI_MEMORY.put(`admin_lock_${chatId}`, String(Date.now() + 1800000), { expirationTtl: 1900 }); await sendTelegram(env, chatId, "wrong password. 30 min lockout."); }
@@ -517,11 +573,6 @@ export async function handleAdmin(env: Env, chatId: string, text: string): Promi
     await sendTelegram(env, chatId, `👥 Users:\n\n${lines}`); return true;
   }
 
-  if (lower === "!stats") {
-    const [all, ap, wl, msgs] = await Promise.all([db(env, "users?select=count"), db(env, "users?status=eq.approved&select=count"), db(env, "users?status=eq.waitlist&select=count"), db(env, "messages?select=count")]);
-    await sendTelegram(env, chatId, `📊 Stats\n\nTotal: ${all?.[0]?.count || 0} · Approved: ${ap?.[0]?.count || 0} · Waitlist: ${wl?.[0]?.count || 0} · Messages: ${msgs?.[0]?.count || 0}`); return true;
-  }
-
   if (lower.startsWith("!userdetails ")) {
     const q = trimmed.split(" ")[1];
     const ur = q.toUpperCase().startsWith("BZ-") ? await db(env, `users?identity_code=eq.${q.toUpperCase()}&limit=1`) : await db(env, `users?id=eq.${q}&limit=1`);
@@ -536,33 +587,22 @@ export async function handleAdmin(env: Env, chatId: string, text: string): Promi
   if (lower === "!userdetails") { await sendTelegram(env, chatId, "usage: !userdetails <id or BZ-XXXX>"); return true; }
 
   if (lower.startsWith("!approve ")) {
-    let uid = trimmed.split(" ")[1]?.trim();
+    const uid = await resolveUserId(env, trimmed.split(" ")[1] || "");
     if (!uid) { await sendTelegram(env, chatId, "usage: !approve <user_id or BZ-XXXX>"); return true; }
-    if (uid.toUpperCase().startsWith("BZ-")) {
-      const u = (await db(env, `users?identity_code=eq.${uid.toUpperCase()}&limit=1`))?.[0];
-      if (!u) { await sendTelegram(env, chatId, "user not found with that code."); return true; }
-      uid = u.id;
-    }
-    await db(env, `users?id=eq.${uid}`, "PATCH", { status: "approved", is_blocked: false });
-    const id = await db(env, `platform_identities?user_id=eq.${uid}&limit=1`);
-    if (id?.[0]) { await sendTelegram(env, id[0].platform_id, "you're approved! 🎉\n\nSet a 4-digit PIN:"); await setAuthStateHelper(env, id[0].platform_id, { step: "set_pin", userId: uid }); }
+    await approveUser(env, uid);
     await sendTelegram(env, chatId, "✅ approved"); return true;
   }
 
   if (lower.startsWith("!deny ")) {
     const uid = await resolveUserId(env, trimmed.split(" ")[1]);
     if (!uid) { await sendTelegram(env, chatId, "user not found."); return true; }
-    await db(env, `users?id=eq.${uid}`, "PATCH", { status: "denied" });
-    const id = await db(env, `platform_identities?user_id=eq.${uid}&limit=1`);
-    if (id?.[0]) await sendTelegram(env, id[0].platform_id, "sorry, not approved.");
+    await denyUser(env, uid);
     await sendTelegram(env, chatId, "❌ denied"); return true;
   }
   if (lower.startsWith("!block ")) {
     const uid = await resolveUserId(env, trimmed.split(" ")[1]);
     if (!uid) { await sendTelegram(env, chatId, "user not found."); return true; }
-    await db(env, `users?id=eq.${uid}`, "PATCH", { is_blocked: true, status: "denied" });
-    const id = await db(env, `platform_identities?user_id=eq.${uid}&limit=1`);
-    if (id?.[0]) await sendTelegram(env, id[0].platform_id, "you've been blocked.");
+    await blockUser(env, uid);
     await sendTelegram(env, chatId, "🚫 blocked"); return true;
   }
   if (lower.startsWith("!unblock ")) {
@@ -594,16 +634,6 @@ export async function handleAdmin(env: Env, chatId: string, text: string): Promi
     const id = await db(env, `platform_identities?user_id=eq.${uid}&platform=eq.telegram&limit=1`);
     if (!id?.[0]) { await sendTelegram(env, chatId, "not found."); return true; }
     await sendTelegram(env, id[0].platform_id, msg); await sendTelegram(env, chatId, "✅ sent"); return true;
-  }
-
-  if (lower === "!storage") {
-    const users = await db(env, "users?select=id,display_name");
-    let r = "💾 Storage\n\n";
-    for (const u of users || []) {
-      const [mems, msgs] = await Promise.all([db(env, `memories?user_id=eq.${u.id}&select=count`), db(env, `messages?user_id=eq.${u.id}&select=count`)]);
-      r += `• ${u.display_name || "unnamed"}: 🧠${mems?.[0]?.count || 0} · 💬${msgs?.[0]?.count || 0}\n`;
-    }
-    await sendTelegram(env, chatId, r); return true;
   }
 
   return false;

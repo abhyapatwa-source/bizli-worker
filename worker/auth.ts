@@ -4,6 +4,13 @@ import { generateIdentityCode, parseDOB, calculateAge, hashPin } from './utils';
 import { sendTelegram, sendSupportToAdmin, generateImage } from './telegram';
 import { getAuthStateHelper, setAuthStateHelper, clearAuthState, lookupUser } from './memory';
 
+// Single implementation of the recover entry point — used by handleAuth AND
+// the index.ts pre-auth intercept (so recovery works during maintenance too).
+export async function startRecoverFlow(env: Env, chatId: string): Promise<void> {
+  await setAuthStateHelper(env, chatId, { step: "recover_gmail" });
+  await sendTelegram(env, chatId, "enter the Gmail you registered with:");
+}
+
 export async function handleAuth(env: Env, chatId: string, text: string, platform = "telegram"): Promise<{ handled: boolean; userId?: string }> {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
@@ -252,8 +259,7 @@ export async function handleAuth(env: Env, chatId: string, text: string, platfor
   }
 
   if (lower === "!recover") {
-    await setAuthStateHelper(env, chatId, { step: "recover_gmail" });
-    await sendTelegram(env, chatId, "enter the Gmail you registered with:");
+    await startRecoverFlow(env, chatId);
     return { handled: true };
   }
 
