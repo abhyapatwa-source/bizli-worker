@@ -1,5 +1,5 @@
 import type { Env } from './types';
-import { fetchTimeout, getGroqKeys, titleCase } from './utils';
+import { fetchTimeout, titleCase } from './utils';
 
 export const OFFICE_MAP: Record<string, string> = {
   "chief minister": "Chief Minister", "cm": "Chief Minister", "mukhyamantri": "Chief Minister",
@@ -19,30 +19,6 @@ export function cleanSearchQuery(text: string): string {
     .trim();
   if (q.split(" ").filter(Boolean).length < 1) return text;
   return q;
-}
-
-export async function extractSearchQuery(env: Env, text: string): Promise<string> {
-  try {
-    const keys = getGroqKeys(env);
-    if (!keys.length) return cleanSearchQuery(text);
-    const res = await fetchTimeout("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[0]}` },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-20b",
-        messages: [
-          { role: "system", content: "You convert a user's question (in ANY language) into a short web-search query of 2-6 keywords. Translate non-English to English keywords. Output ONLY the search query, nothing else, no quotes." },
-          { role: "user", content: text.slice(0, 300) },
-        ],
-        max_tokens: 30,
-        temperature: 0,
-      }),
-    }, 3000);
-    if (!res || !res.ok) return cleanSearchQuery(text);
-    const data = await res.json() as any;
-    const q = data?.choices?.[0]?.message?.content?.trim()?.replace(/^["']|["']$/g, "");
-    return (q && q.length > 1) ? q : cleanSearchQuery(text);
-  } catch { return cleanSearchQuery(text); }
 }
 
 export function extractOfficeQuery(query: string): { office: string; region: string } | null {
@@ -166,102 +142,6 @@ export async function tavilySearch(env: Env, body: any): Promise<any | null> {
     } catch { continue; }
   }
   return null;
-}
-
-export async function getWikiSummary(title: string): Promise<{ extract: string; url: string } | null> {
-  const url = `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`;
-  try {
-    const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(title)}&format=json&origin=*`);
-    if (res.ok) {
-      const data = await res.json() as any;
-      const pages = data?.query?.pages;
-      const page = pages ? Object.values(pages)[0] as any : null;
-      if (page?.extract) return { extract: page.extract, url };
-    }
-  } catch {}
-  try {
-    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
-    if (!res.ok) return null;
-    const data = await res.json() as any;
-    if (!data.extract) return null;
-    return { extract: data.extract, url: data.content_urls?.desktop?.page || url };
-  } catch { return null; }
-}
-
-export async function getInfoboxIncumbent(positionTitle: string): Promise<{ name: string; url: string } | null> {
-  try {
-    const res = await fetch(`https://en.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(positionTitle)}&prop=wikitext&section=0&format=json&origin=*`);
-    if (!res.ok) return null;
-    const data = await res.json() as any;
-    const wikitext: string = data?.parse?.wikitext?.["*"] || "";
-    if (!wikitext) return null;
-    const patterns = [
-      /\|\s*incumbent\s*=\s*([^\n|]+)/i,
-      /\|\s*holder\s*=\s*([^\n|]+)/i,
-      /\|\s*office_?holder\s*=\s*([^\n|]+)/i,
-    ];
-    for (const p of patterns) {
-      const m = wikitext.match(p);
-      if (m && m[1]) {
-        let name = m[1].trim()
-          .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, "$2")
-          .replace(/\{\{[^}]+\}\}/g, "")
-          .replace(/<[^>]+>/g, "")
-          .replace(/'''?/g, "")
-          .trim();
-        if (name && name.length > 2 && name.length < 60 && !/^(vacant|none|tbd)$/i.test(name)) {
-          return { name, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(name.replace(/ /g, "_"))}` };
-        }
-      }
-    }
-    return null;
-  } catch { return null; }
-}
-
-export async function getOfficeHolderWikidata(positionLabel: string): Promise<{ name: string; url: string } | null> {
-  try {
-    const sparql = `
-SELECT ?officeholderLabel ?officeholder WHERE {
-  ?position rdfs:label "${positionLabel}"@en.
-  ?position wdt:P1308 ?officeholder.
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-}`;
-    const res = await fetch(`https://query.wikidata.org/sparql?query=${encodeURIComponent(sparql)}&format=json`, {
-      headers: { "Accept": "application/sparql-results+json", "User-Agent": "BizliAI/1.0" },
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as any;
-    const binding = data?.results?.bindings?.[0];
-    if (!binding) return null;
-    const name = binding.officeholderLabel?.value;
-    const qid = binding.officeholder?.value?.split("/").pop();
-    if (!name) return null;
-    return { name, url: qid ? `https://en.wikipedia.org/wiki/${encodeURIComponent(name.replace(/ /g, "_"))}` : "" };
-  } catch { return null; }
-}
-
-export async function getWikidataOfficeholder(positionTitle: string): Promise<{ name: string; positionUrl: string } | null> {
-  try {
-    const searchRes = await fetch(`https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(positionTitle)}&language=en&format=json&limit=1&type=item`);
-    if (!searchRes.ok) return null;
-    const searchData = await searchRes.json() as any;
-    const positionId = searchData.search?.[0]?.id;
-    if (!positionId) return null;
-    const entityRes = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${positionId}&props=claims&format=json`);
-    if (!entityRes.ok) return null;
-    const entityData = await entityRes.json() as any;
-    const claims = entityData.entities?.[positionId]?.claims?.P1308;
-    if (!claims?.length) return null;
-    const current = claims.find((c: any) => !c.qualifiers?.P582) || claims[0];
-    const personId = current?.mainsnak?.datavalue?.value?.id;
-    if (!personId) return null;
-    const personRes = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${personId}&props=labels&languages=en&format=json`);
-    if (!personRes.ok) return null;
-    const personData = await personRes.json() as any;
-    const name = personData.entities?.[personId]?.labels?.en?.value;
-    if (!name) return null;
-    return { name, positionUrl: `https://www.wikidata.org/wiki/${positionId}` };
-  } catch { return null; }
 }
 
 export async function readUrl(url: string): Promise<string> {

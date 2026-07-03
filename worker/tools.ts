@@ -1,13 +1,8 @@
 import type { Env } from './types';
 import { searchGif } from './utils';
-import { sendTelegramAnimation, sendImageCard, generateImage } from './telegram';
+import { sendTelegramAnimation } from './telegram';
 import { searchWeb, cleanSearchQuery, readUrl } from './search';
-import {
-  getWeather, getNews, getCurrency, getCrypto, getMovie, getTVShow,
-  searchAmazon, getRecipe, getJoke, getQuote, getDictionary, getNASA,
-  translateText, solveMath, getCountry, getISS, getStockPrice,
-  shortenUrl, getPublicHolidays, getFunFact, getQRCode,
-} from './apis';
+import { getWeather, getCurrency, getMovie, getTVShow } from './apis';
 
 export const BIZLI_TOOLS = [
   {
@@ -234,17 +229,9 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
         const tzName = tz.split("/").pop()?.replace(/_/g, " ") || tz;
         return `${timeStr} — ${dateStr} (${tzName})`;
       }
-      case "get_news": {
-        const n = await getNews(env, args.query);
-        return n || "No news found";
-      }
       case "convert_currency": {
         const c = await getCurrency(args.from.toUpperCase(), args.to.toUpperCase(), args.amount);
         return c || "Currency conversion failed";
-      }
-      case "get_crypto_price": {
-        const p = await getCrypto(args.coin);
-        return p || "Crypto price not available";
       }
       case "search_web": {
         const rl = await checkRateLimit(env, chatId, "search");
@@ -260,69 +247,6 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
         const m = await getMovie(env, args.title);
         return m || "Movie not found";
       }
-      case "search_products": {
-        const q = encodeURIComponent(args.query + (args.max_price ? ` under ${args.max_price}` : ""));
-        const amazonLink = `https://www.amazon.in/s?k=${q}`;
-        const flipkartLink = `https://www.flipkart.com/search?q=${q}`;
-        const myntraLink = `https://www.myntra.com/${encodeURIComponent(args.query)}`;
-        const results = await searchAmazon(env, args.query + (args.max_price ? ` under ${args.max_price} rupees` : ""));
-        if (results) return results + `\n\n🔗 Amazon: ${amazonLink}\n🔗 Flipkart: ${flipkartLink}`;
-        return `Here are direct search links:\n\n🛒 Amazon: ${amazonLink}\n🛒 Flipkart: ${flipkartLink}\n🛒 Myntra: ${myntraLink}`;
-      }
-      case "get_recipe": {
-        const r = await getRecipe(args.dish);
-        return r || "Recipe not found";
-      }
-      case "get_joke": {
-        const j = await getJoke();
-        return j || "No joke available";
-      }
-      case "get_quote": {
-        const q = await getQuote();
-        return q || "No quote available";
-      }
-      case "define_word": {
-        const d = await getDictionary(args.word);
-        return d || "Definition not found";
-      }
-      case "get_nasa_apod": {
-        const n = await getNASA(env.NASA_API_KEY);
-        return n || "NASA data not available";
-      }
-      case "translate_text": {
-        const langCodes: Record<string, string> = {
-          "hindi": "hi", "french": "fr", "spanish": "es", "german": "de",
-          "japanese": "ja", "chinese": "zh", "arabic": "ar", "russian": "ru",
-          "portuguese": "pt", "italian": "it", "bengali": "bn", "tamil": "ta",
-          "telugu": "te", "urdu": "ur", "korean": "ko", "turkish": "tr",
-          "dutch": "nl", "polish": "pl", "swedish": "sv", "greek": "el"
-        };
-        const extraCodes: Record<string, string> = {
-          "swahili": "sw", "tagalog": "tl", "malay": "ms", "thai": "th",
-          "vietnamese": "vi", "indonesian": "id", "czech": "cs", "romanian": "ro",
-          "hungarian": "hu", "ukrainian": "uk", "hebrew": "iw", "persian": "fa",
-          "gujarati": "gu", "marathi": "mr", "punjabi": "pa", "kannada": "kn",
-          "malayalam": "ml", "sinhala": "si", "nepali": "ne", "burmese": "my",
-          "amharic": "am", "yoruba": "yo", "hausa": "ha", "somali": "so",
-        };
-        const allCodes = { ...langCodes, ...extraCodes };
-        const lang = allCodes[args.target_language.toLowerCase()] ?? args.target_language.toLowerCase();
-        const t = await translateText(args.text, lang);
-        return t || "Translation failed";
-      }
-      case "calculate_math": {
-        const expr = args.expression.replace(/(\d+)%\s*of\s*(\d+)/i, "($1/100)*$2");
-        const r = await solveMath(expr);
-        return r ? `${args.expression} = ${r}` : "Calculation failed";
-      }
-      case "get_country_info": {
-        const c = await getCountry(args.country);
-        return c || "Country not found";
-      }
-      case "get_iss_location": {
-        const iss = await getISS();
-        return iss || "ISS location not available";
-      }
       case "send_gif": {
         const query = args.query || args.mood || "reaction fun";
         const gifUrl = await searchGif(env, query);
@@ -332,32 +256,10 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
         }
         return "gif_unavailable";
       }
-      case "generate_qr": {
-        const qrUrl = getQRCode(args.data);
-        const label = args.label ? `QR code for ${args.label} 👆` : "here's your QR code 👆";
-        if (chatId) await sendImageCard(env, chatId, label, qrUrl);
-        return `QR code generated for: ${args.data}`;
-      }
       case "read_url": {
         const content = await readUrl(args.url);
         if (!content) return "couldn't read that link — it may be behind a login or not publicly accessible 😕";
         return `Content from ${args.url}:\n\n${content}`;
-      }
-      case "get_stock_price": {
-        const s = await getStockPrice(args.symbol);
-        return s || `couldn't fetch price for ${args.symbol} — try the exact ticker symbol (e.g. RELIANCE.NS for NSE, AAPL for US stocks)`;
-      }
-      case "shorten_url": {
-        const short = await shortenUrl(args.url);
-        return short ? `🔗 ${short}` : "couldn't shorten that URL — make sure it's a valid public link";
-      }
-      case "get_holidays": {
-        const h = await getPublicHolidays(args.country_code, args.year);
-        return h || `no holidays found for ${args.country_code}`;
-      }
-      case "get_fun_fact": {
-        const f = await getFunFact();
-        return f || "couldn't fetch a fact right now 😅";
       }
       case "save_to_vault": {
         const raw = await env.BIZLI_MEMORY.get("bizli_vault");

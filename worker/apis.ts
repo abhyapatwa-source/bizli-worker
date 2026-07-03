@@ -179,15 +179,6 @@ export async function getDictionary(word: string): Promise<string> {
   } catch { return ""; }
 }
 
-export async function getWikipedia(query: string): Promise<string> {
-  try {
-    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`);
-    if (!res.ok) return "";
-    const data = await res.json() as any;
-    return data.extract ? data.extract.slice(0, 400) : "";
-  } catch { return ""; }
-}
-
 export async function getCountry(name: string): Promise<string> {
   try {
     const res = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(name)}?fields=name,capital,population,region,languages,currencies,flags`);
@@ -460,62 +451,3 @@ export async function translateText(text: string, targetLang: string): Promise<s
   } catch { return ""; }
 }
 
-// Stock price via Yahoo Finance — no API key needed
-export async function getStockPrice(symbol: string): Promise<string> {
-  try {
-    const s = symbol.toUpperCase().replace(/[^A-Z0-9.^]/g, "");
-    const res = await fetchTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${s}?interval=1d&range=1d`, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    }, 6000);
-    if (!res || !res.ok) return "";
-    const data = await res.json() as any;
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta?.regularMarketPrice) return "";
-    const price = meta.regularMarketPrice.toFixed(2);
-    const prev = meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice;
-    const change = (meta.regularMarketPrice - prev).toFixed(2);
-    const pct = ((meta.regularMarketPrice - prev) / prev * 100).toFixed(2);
-    const arrow = parseFloat(change) >= 0 ? "📈" : "📉";
-    const name = meta.shortName || meta.longName || s;
-    const currency = meta.currency || "USD";
-    return `${arrow} ${name} (${meta.symbol})\n💰 ${currency} ${price}\n${arrow} ${parseFloat(change) >= 0 ? "+" : ""}${change} (${parseFloat(change) >= 0 ? "+" : ""}${pct}%) today`;
-  } catch { return ""; }
-}
-
-// URL shortener via TinyURL — free, no key
-export async function shortenUrl(url: string): Promise<string> {
-  try {
-    const res = await fetchTimeout(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`, {}, 5000);
-    if (!res || !res.ok) return "";
-    const short = (await res.text()).trim();
-    return short.startsWith("http") ? short : "";
-  } catch { return ""; }
-}
-
-// Public holidays via Nager.Date — free, no key, covers 100+ countries
-export async function getPublicHolidays(countryCode: string, year?: number): Promise<string> {
-  try {
-    const y = year || new Date().getFullYear();
-    const code = countryCode.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
-    const res = await fetchTimeout(`https://date.nager.at/api/v3/PublicHolidays/${y}/${code}`, {}, 5000);
-    if (!res || !res.ok) return "";
-    const data = await res.json() as any;
-    if (!Array.isArray(data) || !data.length) return `No holidays found for ${code}`;
-    const now = new Date();
-    const upcoming = data.filter((h: any) => new Date(h.date) >= now).slice(0, 6);
-    const list = (upcoming.length ? upcoming : data.slice(-6))
-      .map((h: any) => `📅 ${h.date} — ${h.localName || h.name}`)
-      .join("\n");
-    return list;
-  } catch { return ""; }
-}
-
-// Random fun fact — free, no key
-export async function getFunFact(): Promise<string> {
-  try {
-    const res = await fetchTimeout("https://uselessfacts.jsph.pl/api/v2/facts/random?language=en", {}, 4000);
-    if (!res || !res.ok) return "";
-    const data = await res.json() as any;
-    return data?.text || "";
-  } catch { return ""; }
-}

@@ -4,7 +4,7 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-export const BIZLI_VERSION = "v12.29.1";
+export const BIZLI_VERSION = "v12.29.2";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -430,19 +430,6 @@ export async function groqExhausted(env: Env): Promise<boolean> {
   });
 }
 
-function imageTopicForTool(toolName: string, args: any): string {
-  switch (toolName) {
-    case "search_web": return args?.query || "";
-    case "get_movie_info": return args?.title || "";
-    case "get_country_info": return args?.country || "";
-    case "define_word": return args?.word || "";
-    case "get_nasa_apod": return "";
-    case "get_recipe": return args?.dish || "";
-    case "get_crypto_price": return args?.coin || "";
-    default: return "";
-  }
-}
-
 function stripFabricatedUrls(text: string): string {
   return text.replace(/https?:\/\/[^\s)]+/gi, (url) => {
     const u = url.toLowerCase();
@@ -508,59 +495,6 @@ function parsePythonArgs(s: string): Record<string, any> {
     args[m[1]] = m[2] ?? m[3] ?? parseFloat(m[4]);
   }
   return args;
-}
-
-export async function callGemini(
-  env: Env,
-  messages: any[],
-  systemExtra: string,
-  opts: { search?: boolean; images?: { mime: string; data: string }[] } = {}
-): Promise<string> {
-  const keys = getGeminiKeys(env, "bizli");
-  if (!keys.length) return "";
-  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
-  const contents = messages
-    .filter((m: any) => m.role === "user" || m.role === "assistant")
-    .map((m: any) => {
-      const textPart = typeof m.content === "string"
-        ? m.content
-        : Array.isArray(m.content)
-          ? m.content.map((c: any) => c.type === "text" ? c.text : "").join(" ")
-          : "";
-      return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: textPart || "" }] };
-    });
-  if (opts.images?.length && contents.length) {
-    const lastUser = [...contents].reverse().find((c: any) => c.role === "user");
-    if (lastUser) {
-      for (const img of opts.images) {
-        lastUser.parts.push({ inline_data: { mime_type: img.mime, data: img.data } } as any);
-      }
-    }
-  }
-  const body: any = {
-    systemInstruction: { parts: [{ text: system }] },
-    contents,
-    generationConfig: { temperature: 0.75, maxOutputTokens: 512 },
-  };
-  if (opts.search) body.tools = [{ google_search: {} }];
-  const model = "gemini-3.5-flash";
-  for (const key of keys) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) continue;
-      const data = await res.json() as any;
-      const parts = data?.candidates?.[0]?.content?.parts || [];
-      let text = parts.filter((p: any) => !p.thought).map((p: any) => p.text || "").join("").trim();
-      text = text.replace(/\[([^\]]*)\]\(https?:\/\/vertexaisearch\.cloud\.google\.com\/[^)]+\)/g, "$1");
-      text = text.replace(/https?:\/\/vertexaisearch\.cloud\.google\.com\/\S+/g, "");
-      if (text.trim()) return text.trim();
-    } catch { continue; }
-  }
-  return "";
 }
 
 // Cerebras fallback — independent free provider, rotates keys × auto-discovered
@@ -805,8 +739,6 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
             }
             if (!imageSubject) {
               if (toolName === "get_movie_info") { imageSubject = args.title || ""; imageSource = "movie"; }
-              else if (toolName === "get_country_info") { imageSubject = args.country || ""; imageSource = "wiki"; }
-              else if (toolName === "get_recipe") { imageSubject = args.dish || ""; imageSource = "wiki"; }
               else if (toolName === "search_web") { imageSubject = args.query || ""; imageSource = "wiki"; }
             }
             toolMessages.push({ role: "tool", tool_call_id: tc.id, content: result });
@@ -995,28 +927,6 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
     }
   }
   if (statusDirty) await saveGroqStatus(env, status);
-
-  const geminiImages: { mime: string; data: string }[] = [];
-  for (const m of messages) {
-    if (Array.isArray(m.content)) {
-      for (const c of m.content) {
-        if (c.type === "image_url" && typeof c.image_url?.url === "string" && c.image_url.url.startsWith("data:")) {
-          const comma = c.image_url.url.indexOf(",");
-          if (comma !== -1) {
-            const mime = c.image_url.url.slice(5, c.image_url.url.indexOf(";"));
-            const data = c.image_url.url.slice(comma + 1);
-            if (mime && data) geminiImages.push({ mime, data });
-          }
-        }
-      }
-    }
-  }
-
-  const gemini = await callGemini(env, messages, systemExtra, {
-    search: true,
-    images: geminiImages.length ? geminiImages : undefined,
-  });
-  if (gemini) { await recordLastBrain(env, "Gemini"); return sanitizePersonaLeaks(gemini); }
 
   const flatMessages = messages.map((m: any) => ({
     role: m.role,
