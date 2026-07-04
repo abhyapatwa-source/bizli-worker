@@ -10,7 +10,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Multilingual by design** — auto-detects user's language and replies in it
 - **Multi-script** — Latin, Devanagari, Arabic, CJK, Cyrillic, Korean, etc.
 - **Cross-cultural tools** — weather, time, currency, movies work worldwide
-- **Multi-platform** — Telegram, Discord, Facebook, Web Chat (WhatsApp coming)
+- **Multi-platform** — Telegram + Web Chat (Discord & Facebook REMOVED v12.37.x; WhatsApp after stabilization)
 - **Time zones accurate globally** — not just Indian timezones
 - **Cultural sensitivity** — no assumed references, localized when possible
 
@@ -42,13 +42,21 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.36.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.37.2 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
-### BRAIN-FIRST (since v12.31.0) — the keyword router is DEAD
+### BRAIN-FIRST (v12.31.0, completed v12.37.2) — ALL keyword layers are DEAD
 Every chat message in every language goes: commands check → brain (callGroq +
-BIZLI_TOOLS). `detectIntent()` in commands.ts now contains ONLY the
-image-generation flow (rate limit + style picker). There is no regex layer
-answering informational queries anymore — the model decides tool use.
+BIZLI_TOOLS). `detectIntent()` in commands.ts contains ONLY the
+image-generation flow. The presearch layer (needsLiveSearch/cleanSearchQuery)
+was DELETED in v12.37.2 — the model decides when to search (SEARCH-FIRST rule
+in CRITICAL_RULES; queries composed in English, replies in user's language).
+!search = the deep/detailed search mode; normal chat stays Snapchat-short.
+Groq pool has NO reasoning models (think-leaks) and NO small-context models
+(413s): gpt-oss-120b, llama-3.3-70b, llama-4-scout(+maverick candidate).
+Vision = llama-4-scout (3.2-previews dead); vision failure = honest "can't
+see" reply, NEVER text-fallback hallucination. GIFs: thumbnail frame → vision.
+Fallback brains (Cerebras/OpenRouter/CF) get NO_TOOLS_NOTE and their output is
+sanitized (fake call:/model self-naming stripped; empty → cascade to next).
 callGroq also does PROACTIVE quota management: per key+model counters
 (25 req/min, 5500 tok/min, 900 req/day soft limits) stored in the existing
 `groq_status` KV key — combos near limits are skipped silently before any 429.
@@ -75,7 +83,9 @@ models auto-drop, new ones auto-adopt. No code edits needed to stay current.
 - Gemini Lab keys ALSO power memory embeddings (`getEmbedding` uses "lab" scope)
 
 ### Vision (image input)
-- Auto-probed from GROQ_VISION_CANDIDATES (KV-cached); llama-3.2 vision family
+- Auto-probed from GROQ_VISION_CANDIDATES (KV-cached); llama-4-scout leads
+  (llama-3.2 vision previews are DEAD on Groq since ~Feb 2026). Vision failure
+  → honest "can't see" reply — never text-fallback hallucination.
 
 ### Memory extraction
 - `autoExtractMemory` → Cerebras-first (callCerebrasJSON), Groq fallback (callGroqJSON)
@@ -112,8 +122,6 @@ worker/
   memory.ts        (~126 lines) — KV + Supabase memory
   lab.ts           (~135 lines) — Lab Agent backend
   quota.ts         (~59 lines)  — Lab quota tracking
-  discord.ts       (~167 lines) — Discord handler
-  facebook.ts      (~60 lines)  — Facebook Messenger
   group.ts         (~118 lines) — Telegram groups
   html.ts          (~391 lines) — Dashboard HTML assembler (thin)
   dashboard/       — split modules for the dashboard UI (ALL populated)
@@ -135,7 +143,7 @@ worker/
 - 5 Gemini keys: GEMINI_API_KEY, _2, _3, _4, _5 (Lab + embeddings only)
 - 5 Tavily keys: TAVILY_API_KEY, _2, _3, _4, _5
 - Other API keys: OPENROUTER, GOOGLE, GIPHY, TMDB, GUARDIAN, NEWS, NASA, API_NINJAS, SERPER, HF
-- Platform: TELEGRAM_BOT_TOKEN, FB_PAGE_ACCESS_TOKEN, FB_VERIFY_TOKEN, DISCORD_APP_ID, DISCORD_BOT_TOKEN, DISCORD_PUBLIC_KEY
+- Platform: TELEGRAM_BOT_TOKEN (FB_* and DISCORD_* secrets are ORPHANED since v12.37.x — delete from Cloudflare when convenient)
 - Storage: SUPABASE_URL, SUPABASE_SERVICE_KEY
 - Auth: ADMIN_CHAT_ID, ADMIN_PASSWORD
 - KV namespace: BIZLI_MEMORY

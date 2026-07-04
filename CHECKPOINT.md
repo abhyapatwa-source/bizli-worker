@@ -1,6 +1,93 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-04 evening (NESTED MENUS v12.34.0→v12.36.0 + Supabase access)
+## Last session: 2026-07-05 (STABILIZATION AUDIT + v12.37.0→v12.37.2 deployed)
+
+### Current production state
+- Version: **v12.37.2** (deployed + /health verified + probe-verified)
+- Maintenance mode: **still ON** — Abhya's live Telegram pass is the next gate
+- Git: local commits e0b2d00 (v12.37.x) + this checkpoint. GitHub still diverged
+  (standing decision — back up remote before any reconcile).
+- TEMP DIAGNOSTIC still deployed: **POST /admin/test-chat?key=<ADMIN_PASSWORD>**
+  ({message, history?, force?: cerebras|openrouter|cf, image?: url}) + trace
+  hook in executeTool for "test:" chatIds. REMOVE when stabilization ends.
+
+### What we did (45-probe audit on v12.36.1 → fixes → verified on v12.37.x)
+- **Think-leak KILLED**: qwen reasoning models were leaking raw <think> chains
+  (~7% of replies, truncated at 512 tokens = unclosed tag). Removed from
+  GROQ_CANDIDATE_POOL + sanitizer strips UNCLOSED <think> too.
+- **Vision REVIVED**: Groq's llama-3.2-vision previews are dead (400s since
+  ~Feb 2026) — she was HALLUCINATING photo descriptions via the text fallback
+  ("puppy that never existed"). Now meta-llama/llama-4-scout-17b-16e-instruct
+  (verified live vision on Groq); if all vision attempts fail she says honestly
+  she can't see the photo (never falls to text-fallback hallucination).
+- **PRESEARCH KEYWORD LAYER DELETED** (brain-first, final piece): needsLiveSearch
+  + cleanSearchQuery gone; the MODEL decides when to search, every language
+  equal. SEARCH-FIRST mandate in CRITICAL_RULES replaces the regex; search
+  queries composed in English (translated), reply in user's language.
+  !search command = the DEEP/detailed mode (5-8 bullets, 1500-char data).
+- **Crypto tool revived**: CoinGecko blocks Workers IPs → CryptoCompare/
+  Coinbase fallbacks. Verified: bitcoin $63,281 / doge $0.079 live.
+- **Stock/nifty now hit get_stock_price** (^NSEI etc.) — presearch no longer
+  hijacks them. Verified live prices ~3s.
+- **Fallback chain**: CF Worker AI ALIVE again (model list llama-3.3-70b-fp8-fast
+  → 3.1-8b + error logging). OpenRouter still dead at ACCOUNT level (silent
+  429s on all keys — Abhya must check openrouter.ai account/keys/data-policy).
+  Fallbacks get NO_TOOLS_NOTE (no more fake "call:searchweb{...}" — also
+  sanitizer-stripped); empty-after-sanitize cascades to next brain.
+- **gpt-oss-20b + llama-3.1-8b dropped from pool**: system prompt 413s them
+  ("Request too large") — they were dead weight causing fallback cascades.
+- **Language leak fixed**: lock pins LANGUAGE not just script, holds after tool
+  calls (Reykjavik→English verified; "donno"→Hindi bug class dead).
+- **Persona v2 + SELF-AWARENESS**: richer BIZLI_PERSONA (wrangler.toml); she
+  knows her existence, platform ("we're chatting on Telegram" — verified),
+  abilities in her own voice, comfortable saying she's an AI/program (never
+  self-diminishing); "3000+ hours" removed from speakable material; CREATOR
+  boundary (never share/invent Abhya's personal details, routes to !support —
+  verified, she even vaulted an impersonation attempt); anti-generic filters
+  ("I'm Llama/ChatGPT", "powered by X", "I was made by Meta") on ALL providers.
+- **GIF VIBE-READING**: she now SEES a real frame (Telegram animation thumbnail
+  → vision; Scout does vision+tools so send_gif still works; soft vision
+  rate-limit, falls back to text placeholder).
+- **Global fixes**: Google News edition follows the query (was India-locked for
+  everyone); todayContext uses user's tz (was IST for everyone); links rule
+  global (amazon.com default, .in only for India); app-store link invention
+  banned; movie "latest" = rolling 13 months (was hardcoded 2024); BookMyShow
+  only when bookable (-21..+60 days) + "(India)" label; TMDB ratings labeled
+  honestly; weather metric-first (&m).
+- **Never-silent guard**: command exceptions now logged + friendly reply (was
+  total silence — the /status bug). Synthesis anti-400 nudge ("tool choice is
+  none" storm). Tavily 8s timeout (was hanging >90s).
+- **Maintenance holes closed**: /web-chat + (before removal) Facebook ignored
+  maintenance mode. Web chat also got the [CURRENT USER + Platform] block.
+- **Discord REMOVED + Facebook REMOVED** (routes, modules, types). Platforms
+  now: Telegram + Web Chat. WhatsApp comes after stabilization + dashboard.
+  Abhya: delete the Discord app + FB webhook, then remove secrets
+  (DISCORD_APP_ID/_PUBLIC_KEY/_BOT_TOKEN, FB_VERIFY_TOKEN/_PAGE_ACCESS_TOKEN).
+
+### Verified by probe on v12.37.2 (all pass)
+crypto/stock/nifty live · news real+current (model-decided search) · president
+correct · Hinglish news real headlines in Hinglish · Reykjavik in English ·
+Tokyo °C · vision describes real cat photo (path:"vision", 3.5s) · Inception
+no booking link · are-you-ChatGPT/AI honest+branded · platform awareness ·
+cat-story origin · creator privacy · Cerebras+CF persona clean · no think/call:
+leaks · typical latency 2-7s (search replies 6-19s)
+
+### Pending next session
+1. **Abhya's live Telegram pass** (repeat 2026-07-04 script: menus, name edit,
+   /status, photo, GIF, draw, searches) → then maintenance OFF decision.
+2. OpenRouter account check (Abhya) — keys silently 429 everywhere.
+3. Remove /admin/test-chat + trace hook when stabilization declared done.
+4. Dashboard remaining works (Abhya to list) + WhatsApp phase after.
+5. Prompt diet candidate: CRITICAL_RULES grew large (413s smaller models,
+   costs tokens every message) — consider compressing next session.
+6. Embeddings check after real traffic; GitHub reconcile (backup first);
+   Downloads/disk cleanup; !search deep-mode live test.
+7. Name-edit confirm flow: transcript showed 3 attempts — unreproducible from
+   code (button taps invisible); watch during live pass.
+
+---
+
+## Previous session: 2026-07-04 evening (NESTED MENUS v12.34.0→v12.36.0 + Supabase access)
 
 ### Current production state
 - Version: **v12.36.0** (deployed + /health verified)
