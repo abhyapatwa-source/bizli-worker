@@ -52,11 +52,18 @@
 
 ### Other pending
 1. GitHub reconcile (deferred): back up remote main, then push local as truth.
-   Local = 10+ commits ahead on separate history. Do NOT force-push blind.
-2. Supabase `test_results` table SQL (Tests tab data blocker).
-3. Verify semantic memory embeddings accumulating in Supabase.
-4. Disk space: C: was at 0 bytes; ~1GB freed. Abhya should clear Downloads etc.
-5. Automation ideas discussed (not built): watchdog + daily admin digest,
+   Local = 11 commits ahead on separate history. Do NOT force-push blind.
+2. ~~Supabase `test_results` SQL~~ RESOLVED 2026-07-04: table already exists
+   with 79 rows (verified via Management API). If Tests tab is still empty,
+   debug the tab/stats endpoint instead.
+3. Verify semantic memory embeddings: as of 2026-07-04, `memories` has 3 rows,
+   0 with embeddings — but maintenance ON = no traffic since the v12.30.0 fix,
+   so inconclusive. Re-check after maintenance OFF + some real chats:
+   `select count(*) from memories where embedding is not null`.
+4. NEW 2026-07-04: Claude Code now has Supabase SQL access — personal access
+   token + project ref in gitignored `.dev.vars` (see CLAUDE.md SECRETS).
+5. Disk space: C: was at 0 bytes; ~1GB freed. Abhya should clear Downloads etc.
+6. Automation ideas discussed (not built): watchdog + daily admin digest,
    post-probe canary cron (foundation now exists: !agent test), auto-degrade
    mode, memory hygiene cron.
 

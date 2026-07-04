@@ -130,6 +130,12 @@ worker/
 - Auth: ADMIN_CHAT_ID, ADMIN_PASSWORD
 - KV namespace: BIZLI_MEMORY
 
+### Local-only (gitignored `.dev.vars`, NOT Cloudflare secrets)
+- SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF (`bpkfvhcluovzcyozchwj`) — lets
+  Claude Code run SQL via the Supabase Management API
+  (`POST https://api.supabase.com/v1/projects/<ref>/database/query`).
+  Never print the token; Abhya can revoke at supabase.com/dashboard/account/tokens.
+
 ---
 
 ## BIZLI'S 12 ACTIVE TOOLS (in BIZLI_TOOLS)
@@ -244,7 +250,7 @@ dir "C:\Users\bizli\Downloads\index*.ts" /OD
 - ✅ v12.1.0: tests.ts — 5-test suite, Gemini scorer, 6h cron gate, quality alert at <60%
 - ✅ v12.1.0: Tests tab in dashboard (pass rate gauge, per-test result cards, skeleton loaders)
 - ✅ v12.2.0: Lab Agent speed — parallel fetch, 2.0-flash first, 18s timeout
-- ⏳ **Supabase `test_results` table** — SQL needs to be run to unblock Tests tab data
+- ✅ Supabase `test_results` table — EXISTS with rows (verified via SQL 2026-07-04); if Tests tab shows no data, debug the tab/endpoint, not the table
 - ⏳ Anomaly detection (proactive alerts when quality drops — auto-testing foundation laid)
 - ⏳ Cross-session memory + pattern recognition (future)
 
@@ -280,7 +286,7 @@ dir "C:\Users\bizli\Downloads\index*.ts" /OD
 3. GitHub `origin/main` diverged from local (local = deployed truth, ~v12.30.0;
    GitHub stuck at old v12.18.0 line). Local commits are safe on disk. Reconcile
    later — do NOT force-push without backing up the remote branch first.
-4. Supabase `test_results` table SQL still pending (Tests tab data blocker).
+4. ~~Supabase `test_results` table SQL~~ RESOLVED 2026-07-04: table exists, 79 rows. If Tests tab is empty, the bug is in the tab/stats endpoint.
 
 ---
 

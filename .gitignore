@@ -7,6 +7,10 @@ dist/
 # Local Wrangler / Miniflare dev state
 .wrangler/
 
+# Local secrets (Supabase token etc.) — never commit
+.dev.vars
+.env
+
 # Logs & OS junk
 *.log
 .DS_Store
