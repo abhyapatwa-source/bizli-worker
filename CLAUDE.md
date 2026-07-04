@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.35.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.36.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ### BRAIN-FIRST (since v12.31.0) — the keyword router is DEAD
 Every chat message in every language goes: commands check → brain (callGroq +
@@ -80,6 +80,16 @@ models auto-drop, new ones auto-adopt. No code edits needed to stay current.
 ### Memory extraction
 - `autoExtractMemory` → Cerebras-first (callCerebrasJSON), Groq fallback (callGroqJSON)
 - Runs every 4th message; no longer competes with chat for Groq quota
+
+### Chat sessions (v12.36.0)
+- Short-term history (`history_<userId>` KV) is stored as `{ts, msgs}`. After
+  an away-gap > 4h (SESSION_GAP_MS in memory.ts), getKVHistory KEEPS the old
+  messages but appends a system note ("conversation above was ~Xh ago — greet
+  fresh, don't continue old topics unless the user does"). ChatGPT-style:
+  aware, not continuing. The note is never persisted — appendKVHistory reads
+  raw history. Long-term Supabase memories unaffected. Telegram Bot API can't
+  see online/offline presence; last-message time is the only away signal.
+  Legacy plain-array histories read as ts 0 and upgrade on next write.
 
 ---
 

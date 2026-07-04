@@ -4,12 +4,12 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-// v12.35.0 — JUST TYPE THE VALUE + CONFIRM: ✏️ edit buttons and menu ✍️
-// buttons ask conversationally ("what should I call you?"), the next plain
-// message becomes the value, and saving commands confirm first ("set your
-// name to \"Papa\"?" ✅/✏️/❌) before executing. Generic await_input →
-// confirm_input states (auth.ts), cancel word, !/ escape, 10-min expiry.
-export const BIZLI_VERSION = "v12.35.0";
+// v12.36.0 — SESSION FRESHNESS (soft, ChatGPT-style): after a 4h away-gap,
+// getKVHistory keeps the old messages but injects a system note ("this was
+// hours ago — greet fresh, don't continue old topics") so Bizli is aware but
+// doesn't resume the old thread. {ts,msgs} wrapper in history_ KV; the note is
+// never persisted (appendKVHistory reads raw). All platforms, one gate.
+export const BIZLI_VERSION = "v12.36.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

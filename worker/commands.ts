@@ -399,7 +399,7 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     const ready = keys.filter((_, i) => (gStatus.cooldowns[i] || 0) <= now).length;
     const healthy = keys.length === 0 ? false : ready / keys.length >= 0.3;
     const mems = await getUserMemories(env, userId);
-    const hist = (await getKVHistory(env, userId)).length;
+    const hist = (await getKVHistory(env, userId)).filter((m: any) => m.role !== "system").length;
     const userTz = (await env.BIZLI_MEMORY.get(`tz_${userId}`)) || "UTC";
     const localTime = new Date().toLocaleTimeString("en-US", { timeZone: userTz, hour: "2-digit", minute: "2-digit", hour12: true });
     const statusMsg =

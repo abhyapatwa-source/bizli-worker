@@ -2,13 +2,36 @@ import type { Env } from './types';
 import { db } from './db';
 import { getGeminiKeys } from './utils';
 
-export async function getKVHistory(env: Env, userId: string): Promise<any[]> {
+// Short-term history behaves like a SESSION, ChatGPT-style: after an away-gap
+// longer than SESSION_GAP_MS, the old messages are KEPT (Bizli still knows
+// what was said) but a system note tells the model they're old — greet fresh,
+// don't continue old topics unless the user does. Long-term Supabase memories
+// are unaffected. Stored as { ts, msgs }; legacy plain arrays read as ts 0
+// (note shows once) and upgrade on the next write.
+const SESSION_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+async function readHistoryRaw(env: Env, userId: string): Promise<{ ts: number; msgs: any[] }> {
   const val = await env.BIZLI_MEMORY.get(`history_${userId}`);
-  return val ? JSON.parse(val) : [];
+  if (!val) return { ts: 0, msgs: [] };
+  const parsed = JSON.parse(val);
+  if (Array.isArray(parsed)) return { ts: 0, msgs: parsed }; // legacy format
+  return { ts: parsed.ts || 0, msgs: parsed.msgs || [] };
+}
+
+export async function getKVHistory(env: Env, userId: string): Promise<any[]> {
+  const { ts, msgs } = await readHistoryRaw(env, userId);
+  const gapMs = Date.now() - ts;
+  if (msgs.length && gapMs > SESSION_GAP_MS) {
+    const ago = ts ? `about ${Math.round(gapMs / 3_600_000)} hours ago` : "a while ago";
+    return [...msgs, { role: "system", content:
+      `(note: the conversation above happened ${ago}. The user has just come back — greet them fresh and naturally, like a new chat. Do NOT continue or bring up the older topics unless the user mentions them first.)` }];
+  }
+  return msgs;
 }
 
 export async function appendKVHistory(env: Env, userId: string, role: string, content: string): Promise<void> {
-  const history = await getKVHistory(env, userId);
+  // Raw read — the session-gap note from getKVHistory must never be persisted.
+  const { msgs: history } = await readHistoryRaw(env, userId);
   // Cap individual message length to keep context lean across 50 users
   const trimmedContent = content.slice(0, 500);
   history.push({ role, content: trimmedContent });
@@ -18,8 +41,9 @@ export async function appendKVHistory(env: Env, userId: string, role: string, co
   while (kept.length > 4 && kept.reduce((s: number, m: any) => s + (m.content?.length || 0), 0) > 7000) {
     kept = kept.slice(2);
   }
-  await env.BIZLI_MEMORY.put(`history_${userId}`, JSON.stringify(kept), { expirationTtl: 2592000 });
+  await env.BIZLI_MEMORY.put(`history_${userId}`, JSON.stringify({ ts: Date.now(), msgs: kept }), { expirationTtl: 2592000 });
 }
+
 
 export async function getEmbedding(env: Env, text: string): Promise<number[] | null> {
   // Gemini keys live under the "lab" scope — the default ("bizli") is always empty.
