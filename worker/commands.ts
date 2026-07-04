@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import { db } from './db';
 import { getGroqKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB } from './utils';
-import { sendTelegram, answerCallback, sendSupportToAdmin } from './telegram';
+import { sendTelegram, editTelegramMessage, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAuthStateHelper, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
 import { searchWeb } from './search';
 import { checkRateLimit, RATE_LIMITS } from './tools';
@@ -12,18 +12,48 @@ import { runHelpMenu, runAdminMenu, runAgentCommand, approveUser, denyUser, bloc
 // Shared single implementations — used by handleUserCommand (logged-in users,
 // all platforms) AND the index.ts pre-auth intercept (works during maintenance
 // and for logged-out users). Never inline-copy these flows again.
-export async function sendForgotPinRequest(env: Env, chatId: string, platform: string, u: any): Promise<void> {
+// `via` (optional) replaces the user-facing send — the help menu's ▶ Run
+// passes it to render the result inside the menu message instead.
+export async function sendForgotPinRequest(env: Env, chatId: string, platform: string, u: any, via?: (text: string, rows?: any[]) => Promise<void>): Promise<void> {
   await sendTelegram(env, env.ADMIN_CHAT_ID,
     `🔑 PIN Reset\n\nName: ${u?.display_name || "Unknown"}\nCode: ${u?.identity_code || "N/A"}\nGmail: ${u?.gmail || "N/A"}\nID: ${u?.id || chatId}\nPlatform: ${platform}`,
     { reply_markup: { inline_keyboard: [[{ text: "🔑 Reset PIN", callback_data: `resetpin:${u?.id || chatId}` }, { text: "💬 Reply", callback_data: `reply:${chatId}` }]] } }
   );
-  await sendTelegram(env, chatId, "request sent! admin will reset your PIN shortly 🙏");
+  const confirm = "request sent! admin will reset your PIN shortly 🙏";
+  if (via) await via(confirm);
+  else await sendTelegram(env, chatId, confirm);
 }
 
-export async function sendSupportPrompt(env: Env, chatId: string): Promise<void> {
-  await sendTelegram(env, chatId, "what do you need help with?",
-    { reply_markup: { inline_keyboard: [[{ text: "🔑 PIN Issue", callback_data: `support_cat:${chatId}|pin` }, { text: "🔐 Can't Login", callback_data: `support_cat:${chatId}|login` }, { text: "💬 Other", callback_data: `support_cat:${chatId}|other` }]] } }
-  );
+export async function sendSupportPrompt(env: Env, chatId: string, via?: (text: string, rows?: any[]) => Promise<void>): Promise<void> {
+  const text = "what do you need help with?";
+  const rows = [[{ text: "🔑 PIN Issue", callback_data: `support_cat:${chatId}|pin` }, { text: "🔐 Can't Login", callback_data: `support_cat:${chatId}|login` }, { text: "💬 Other", callback_data: `support_cat:${chatId}|other` }]];
+  if (via) await via(text, rows);
+  else await sendTelegram(env, chatId, text, { reply_markup: { inline_keyboard: rows } });
+}
+
+// Settings card builder — shared by !settings (typed + ▶ Run) and the
+// st:greet_* toggle refresh, so the card can never go stale or drift.
+export async function buildSettingsCard(env: Env, userId: string): Promise<{ text: string; rows: any[] }> {
+  const off = await env.BIZLI_MEMORY.get(`greet_off_${userId}`);
+  const explicitTz = await env.BIZLI_MEMORY.get(`tz_${userId}`);
+  const u = (await db(env, `users?id=eq.${userId}&select=city&limit=1`))?.[0];
+  const cityTz = u?.city ? cityToTimezone(u.city) : "";
+  const lang = await env.BIZLI_MEMORY.get(`lang_${userId}`);
+  const inferredTz = lang ? inferTimezoneFromLangCode(lang) : "";
+  const activeTz = explicitTz || cityTz || inferredTz;
+  const tzSource = explicitTz ? "" : cityTz ? "from your city" : inferredTz ? "auto-detected" : "";
+  return {
+    text: `⚙️ Settings\n\n` +
+      `🕐 Timezone: ${activeTz || "not set (UTC)"}${tzSource ? ` (${tzSource})` : ""}\n` +
+      `🌅 Daily greetings: ${off ? "OFF" : "ON"}\n\n` +
+      `To set timezone, type:\n!timezone set Asia/Kolkata`,
+    rows: [
+      [off
+        ? { text: "🌅 Turn greetings ON", callback_data: "st:greet_on" }
+        : { text: "🌙 Turn greetings OFF", callback_data: "st:greet_off" }],
+      [{ text: "📍 Update my city", callback_data: "hcmd:editloc" }],
+    ],
+  };
 }
 
 export async function detectIntent(env: Env, text: string, chatId: string, userId: string): Promise<boolean> {
@@ -88,8 +118,8 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
   if (data.startsWith("help:")) {
     const payload = data.slice("help:".length);
     if (payload.startsWith("r:")) {
-      // ▶ Run: execute the card item's command. Output arrives as a NEW
-      // message below the menu — the menu stays intact for further taps.
+      // ▶ Run: execute the card item's command and morph the result INTO the
+      // menu message — its own buttons + Back/Main-Menu rows (no extra msgs).
       const [, gs, is] = payload.split(":");
       const item = getUserCardItem(parseInt(gs), parseInt(is));
       if (item?.run) {
@@ -97,7 +127,8 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
         const userId = identity?.[0]?.user_id;
         if (!userId) { await answerCallback(env, cbId, ""); await sendTelegram(env, fromId, "please log in first"); return; }
         await answerCallback(env, cbId, "▶️");
-        await handleUserCommand(env, fromId, item.run, userId);
+        const nav = [[{ text: "⬅️ Back", callback_data: `help:c:${gs}` }, { text: "🏠 Main Menu", callback_data: "help:m" }]];
+        await handleUserCommand(env, fromId, item.run, userId, "telegram", cbMessageId ? { messageId: cbMessageId, nav } : undefined);
       } else {
         await answerCallback(env, cbId, "");
         await runHelpMenu(env, fromId, "m", cbMessageId);
@@ -176,13 +207,18 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     const identity = await db(env, `platform_identities?platform=eq.telegram&platform_id=eq.${fromId}&limit=1`);
     const uid = identity?.[0]?.user_id;
     if (!uid) { await answerCallback(env, cbId, "please log in first"); return; }
-    await answerCallback(env, cbId, "✅");
     if (data === "st:greet_on") {
       await env.BIZLI_MEMORY.delete(`greet_off_${uid}`);
-      await sendTelegram(env, fromId, "morning and night messages are back on 🌅");
+      await answerCallback(env, cbId, "morning & night messages back on 🌅");
     } else {
       await env.BIZLI_MEMORY.put(`greet_off_${uid}`, "1", { expirationTtl: 31536000 });
-      await sendTelegram(env, fromId, "got it — no more morning/night messages. !settings to turn them back on");
+      await answerCallback(env, cbId, "got it — no more morning/night messages 🌙");
+    }
+    // Refresh the settings card in place so the toggle never shows stale state.
+    if (cbMessageId) {
+      const card = await buildSettingsCard(env, uid);
+      await editTelegramMessage(env, fromId, cbMessageId, card.text,
+        { inline_keyboard: [...card.rows, [{ text: "🏠 Main Menu", callback_data: "help:m" }]] });
     }
     return;
   }
@@ -204,13 +240,17 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     const kvKeys = [`history_${uid}`, `tz_${uid}`, `greet_off_${uid}`, `lang_${uid}`, `logged_out_${fromId}`, `auth_${fromId}`, `greeted_${fromId}`,
       `rl_image_${fromId}`, `rl_search_${fromId}`, `rl_research_${fromId}`, `rl_vision_${fromId}`];
     await Promise.all(kvKeys.map(k => env.BIZLI_MEMORY.delete(k).catch(() => {})));
-    await sendTelegram(env, fromId, "done — everything's deleted. it was really nice knowing you 💛 if you ever want to come back, just send /start");
+    const goodbye = "done — everything's deleted. it was really nice knowing you 💛 if you ever want to come back, just send /start";
+    if (cbMessageId) await editTelegramMessage(env, fromId, cbMessageId, goodbye, { inline_keyboard: [] });
+    else await sendTelegram(env, fromId, goodbye);
     await sendTelegram(env, env.ADMIN_CHAT_ID, `🗑️ Self-deletion: a user deleted their account + all data (id ${uid}).`);
     return;
   }
   if (data === "delme_no") {
     await answerCallback(env, cbId, "💛");
-    await sendTelegram(env, fromId, "phew — staying right here with you 💛");
+    const stay = "phew — staying right here with you 💛";
+    if (cbMessageId) await editTelegramMessage(env, fromId, cbMessageId, stay, { inline_keyboard: [[{ text: "🏠 Main Menu", callback_data: "help:m" }]] });
+    else await sendTelegram(env, fromId, stay);
     return;
   }
 
@@ -278,9 +318,17 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
   }
 }
 
-export async function handleUserCommand(env: Env, chatId: string, text: string, userId: string, platform = "telegram"): Promise<boolean> {
+// inPlace (set by the help menu's ▶ Run): render the command's result INSIDE
+// the menu message — its own buttons merged with the menu's Back/Main-Menu
+// rows. Typed commands (inPlace absent) send a fresh message as always.
+export async function handleUserCommand(env: Env, chatId: string, text: string, userId: string, platform = "telegram", inPlace?: { messageId: number; nav: any[] }): Promise<boolean> {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
+  const reply = async (text: string, rows: any[] = []) => {
+    if (inPlace) await editTelegramMessage(env, chatId, inPlace.messageId, text, { inline_keyboard: [...rows, ...inPlace.nav] });
+    else if (rows.length) await sendTelegram(env, chatId, text, { reply_markup: { inline_keyboard: rows } });
+    else await sendTelegram(env, chatId, text);
+  };
 
   if (lower === "!help") {
     await runHelpMenu(env, chatId, "menu");
@@ -304,7 +352,7 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
       `💬 short-term: ${hist}/15 messages in my head\n` +
       `🕐 your time: ${localTime} (${userTz})\n\n` +
       `_!settings to change timezone & greetings_`;
-    await sendTelegram(env, chatId, statusMsg);
+    await reply(statusMsg);
     return true;
   }
 
@@ -343,25 +391,8 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     return true;
   }
   if (lower === "!greetings" || lower === "!settings") {
-    const off = await env.BIZLI_MEMORY.get(`greet_off_${userId}`);
-    const explicitTz = await env.BIZLI_MEMORY.get(`tz_${userId}`);
-    const u = (await db(env, `users?id=eq.${userId}&select=city&limit=1`))?.[0];
-    const cityTz = u?.city ? cityToTimezone(u.city) : "";
-    const lang = await env.BIZLI_MEMORY.get(`lang_${userId}`);
-    const inferredTz = lang ? inferTimezoneFromLangCode(lang) : "";
-    const activeTz = explicitTz || cityTz || inferredTz;
-    const tzSource = explicitTz ? "" : cityTz ? "from your city" : inferredTz ? "auto-detected" : "";
-    await sendTelegram(env, chatId,
-      `⚙️ Settings\n\n` +
-      `🕐 Timezone: ${activeTz || "not set (UTC)"}${tzSource ? ` (${tzSource})` : ""}\n` +
-      `🌅 Daily greetings: ${off ? "OFF" : "ON"}\n\n` +
-      `To set timezone, type:\n!timezone set Asia/Kolkata`,
-      { reply_markup: { inline_keyboard: [
-        [off
-          ? { text: "🌅 Turn greetings ON", callback_data: "st:greet_on" }
-          : { text: "🌙 Turn greetings OFF", callback_data: "st:greet_off" }],
-        [{ text: "📍 Update my city", callback_data: "hcmd:editloc" }],
-      ] } });
+    const card = await buildSettingsCard(env, userId);
+    await reply(card.text, card.rows);
     return true;
   }
 
@@ -376,7 +407,7 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
       const resetMin = bucket.resetAt > now ? Math.ceil((bucket.resetAt - now) / 60000) : 0;
       lines.push(`${feature}: ${used}/${cfg.max}${resetMin ? ` (resets in ${resetMin}m)` : ""}`);
     }
-    await sendTelegram(env, chatId, `📈 Your usage:\n\n${lines.join("\n")}`);
+    await reply(`📈 Your usage:\n\n${lines.join("\n")}`);
     return true;
   }
 
@@ -384,13 +415,13 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     const dobLine = u?.date_of_birth ? `\nDate of Birth: ${u.date_of_birth} (Age: ${calculateAge(u.date_of_birth)})` : "";
     const cityLine = u?.city ? `\nLocation: ${u.city}` : "";
-    await sendTelegram(env, chatId,
+    await reply(
       `👤 Your Details\n\nName: ${u?.display_name}\nCode: ${u?.identity_code}\nGmail: ${u?.gmail || "N/A"}${dobLine}${cityLine}\nStatus: ${u?.status}\n\nSave your code — needed to login anywhere.\n\nTap below to edit anything 👇`,
-      { reply_markup: { inline_keyboard: [
+      [
         [{ text: "✏️ Name", callback_data: "hcmd:editname" }, { text: "📧 Email", callback_data: "hcmd:editgmail" }],
         [{ text: "📅 DOB", callback_data: "hcmd:editdob" }, { text: "📍 Location", callback_data: "hcmd:editloc" }],
         [{ text: "🔑 Change PIN", callback_data: "hcmd:changepin" }],
-      ] } });
+      ]);
     return true;
   }
 
@@ -457,8 +488,8 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
 
   if (lower === "!memories") {
     const mems = await getUserMemories(env, userId);
-    if (!mems.length) { await sendTelegram(env, chatId, "nothing saved yet."); return true; }
-    await sendTelegram(env, chatId, `🧠 what I remember:\n\n${mems.map((m: any, i: number) => `${i+1}. ${m.content} [${m.category}]`).join("\n")}`);
+    if (!mems.length) { await reply("nothing saved yet."); return true; }
+    await reply(`🧠 what I remember:\n\n${mems.map((m: any, i: number) => `${i+1}. ${m.content} [${m.category}]`).join("\n")}`);
     return true;
   }
 
@@ -474,12 +505,12 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
 
   if (lower === "!forgotpin") {
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
-    await sendForgotPinRequest(env, chatId, platform, u || { id: userId });
+    await sendForgotPinRequest(env, chatId, platform, u || { id: userId }, inPlace ? reply : undefined);
     return true;
   }
 
   if (lower === "!support") {
-    await sendSupportPrompt(env, chatId);
+    await sendSupportPrompt(env, chatId, inPlace ? reply : undefined);
     return true;
   }
 
@@ -528,18 +559,18 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
   if (lower === "!logout") {
     await env.BIZLI_MEMORY.delete(`history_${userId}`);
     await env.BIZLI_MEMORY.put(`logged_out_${chatId}`, "1", { expirationTtl: 2592000 });
-    await sendTelegram(env, chatId, "logged out 🔒 tap below whenever you want to come back 👇",
-      { reply_markup: { inline_keyboard: [[{ text: "🔑 Log in", callback_data: `start_login:${chatId}` }]] } });
+    await reply("logged out 🔒 tap below whenever you want to come back 👇",
+      [[{ text: "🔑 Log in", callback_data: `start_login:${chatId}` }]]);
     return true;
   }
 
   if (lower === "!deleteme") {
-    await sendTelegram(env, chatId,
+    await reply(
       "this permanently deletes your account, memories, and chat history — everything, no undo 💔\n\nare you sure?",
-      { reply_markup: { inline_keyboard: [
+      [
         [{ text: "🗑️ Yes, delete everything", callback_data: `delme:${userId}` }],
         [{ text: "💛 No, keep my account", callback_data: "delme_no" }],
-      ] } });
+      ]);
     return true;
   }
 

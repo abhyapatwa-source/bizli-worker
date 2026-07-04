@@ -43,9 +43,9 @@ export async function blockUser(env: Env, uid: string): Promise<void> {
 // from these arrays. Adding/removing a command = update its handler AND here.
 //
 // run = what the ▶ Run button does.
-//   USER_CARD:  a typed command executed via handleUserCommand — its output
-//               arrives as a NEW message below the menu (the menu is never
-//               edited by Run, so commands with their own keyboards work).
+//   USER_CARD:  a typed command executed via handleUserCommand with inPlace —
+//               the result morphs INTO the menu message (the command's own
+//               buttons merged with Back/Main-Menu rows). No extra messages.
 //   ADMIN_CARD: "agent:<sub>" / "adm:<action>" dispatch through the existing
 //               edit-in-place menu machinery; "!cmd" goes through handleAdmin.
 //   No run → the detail page shows a "type it like" hint instead of ▶ Run.

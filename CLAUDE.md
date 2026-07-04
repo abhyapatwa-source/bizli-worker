@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.34.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.34.1 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ### BRAIN-FIRST (since v12.31.0) — the keyword router is DEAD
 Every chat message in every language goes: commands check → brain (callGroq +
@@ -166,7 +166,8 @@ tool backends — nothing else references it.
   example?, run?}) and !help / !admin are ONE message that morphs in place:
   main menu (category buttons) → category flash card (button per command) →
   detail page (usage + example) with ▶ Run / ⬅ Back / 🏠 Main Menu.
-  User Run = executes via handleUserCommand as a NEW message (menu intact);
+  User Run = executes via handleUserCommand with inPlace → result morphs INTO
+  the menu message (command's own buttons + nav rows merged, zero extra msgs);
   admin Run = agent:/adm: actions edit in place. Callback scheme:
   help:m · help:c:<g> · help:d:<g>:<i> · help:r:<g>:<i> (run, in commands.ts)
   and adm:menu · adm:c/d/r equivalents. Agent panel = the AGENT realm page
