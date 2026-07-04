@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { db } from './db';
 import { getGroqKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB } from './utils';
 import { sendTelegram, editTelegramMessage, answerCallback, sendSupportToAdmin } from './telegram';
-import { isAdminSession, setAuthStateHelper, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
+import { isAdminSession, setAuthStateHelper, getAuthStateHelper, clearAuthState, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
 import { searchWeb } from './search';
 import { checkRateLimit, RATE_LIMITS } from './tools';
 import { callGroq, getGroqStatus } from './brain';
@@ -135,6 +135,31 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
       }
       return;
     }
+    if (payload.startsWith("a:")) {
+      // ✍️ Type it here: ask for the value in the card; the next plain
+      // message becomes the command's argument (await_input, auth.ts).
+      const [, gs, is] = payload.split(":");
+      const item = getUserCardItem(parseInt(gs), parseInt(is));
+      if (item?.ask) {
+        const identity = await db(env, `platform_identities?platform=eq.telegram&platform_id=eq.${fromId}&limit=1`);
+        const userId = identity?.[0]?.user_id;
+        if (!userId) { await answerCallback(env, cbId, ""); await sendTelegram(env, fromId, "please log in first"); return; }
+        await setAuthStateHelper(env, fromId, { step: "await_input", cmd: item.cmd.split(" ")[0], userId });
+        await answerCallback(env, cbId, "✍️");
+        const askText = `${item.ask}\n\n(type "cancel" to skip)`;
+        const nav = { inline_keyboard: [[{ text: "⬅️ Back", callback_data: `help:c:${gs}` }, { text: "🏠 Main Menu", callback_data: "help:m" }]] };
+        if (cbMessageId) await editTelegramMessage(env, fromId, cbMessageId, askText, nav);
+        else await sendTelegram(env, fromId, askText);
+      } else {
+        await answerCallback(env, cbId, "");
+        await runHelpMenu(env, fromId, "m", cbMessageId);
+      }
+      return;
+    }
+    // Navigating away drops any pending "type the value" wait so the next
+    // plain message goes back to the brain, not a stale command.
+    const pending = await getAuthStateHelper(env, fromId);
+    if (pending?.step === "await_input") await clearAuthState(env, fromId);
     await answerCallback(env, cbId, "");
     await runHelpMenu(env, fromId, payload, cbMessageId);
     return;
@@ -150,20 +175,26 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
       details: "!mydetails", memories: "!memories", greetings: "!greetings",
       settings: "!settings", changepin: "!changepin", support: "!support",
       forgotpin: "!forgotpin", recover: "!recover", status: "!status", usage: "!myusage",
+      logout: "!logout",
     };
     if (directCmds[cmd]) { await handleUserCommand(env, fromId, directCmds[cmd], userId); return; }
-    const hints: Record<string, string> = {
-      editname:  "to edit your name, type:\n!editname YourNewName",
-      editgmail: "to edit your email, type:\n!editgmail your@email.com",
-      editdob:   "to edit your date of birth, type:\n!editdob 15 Jan 2000",
-      editloc:   "to edit your location, type:\n!editlocation Mumbai, India",
-      remember:  "to save something, type:\n!remember <what you want me to remember>",
-      forget:    "to make me forget something, type:\n!forget <what to forget>",
-      feedback:  "to send feedback, type:\n!feedback <your message>",
-      search:    "just ask me anything directly, or type:\n!search <your query>",
-      logout:    "to log out, type:\n!logout",
+    // "Just type the value" prompts — the next plain message is treated as the
+    // command's argument (await_input state, consumed in auth.ts handleAuth).
+    const asks: Record<string, { cmd: string; prompt: string }> = {
+      editname:  { cmd: "!editname", prompt: "what should I call you? just type your new name 👇" },
+      editgmail: { cmd: "!editgmail", prompt: "what's your new email? just type it 👇" },
+      editdob:   { cmd: "!editdob", prompt: "when's your birthday? just type it (e.g. 15 Jan 2000) 👇" },
+      editloc:   { cmd: "!editlocation", prompt: "which city are you in? just type it (e.g. Mumbai, India) 👇" },
+      remember:  { cmd: "!remember", prompt: "what should I remember? just type it 👇" },
+      forget:    { cmd: "!forget", prompt: "which memory number should I forget? just type the number (or \"all\") 👇" },
+      feedback:  { cmd: "!feedback", prompt: "tell me anything — just type your feedback 👇" },
+      search:    { cmd: "!search", prompt: "what should I search for? just type it 👇" },
     };
-    if (hints[cmd]) { await sendTelegram(env, fromId, hints[cmd]); return; }
+    if (asks[cmd]) {
+      await setAuthStateHelper(env, fromId, { step: "await_input", cmd: asks[cmd].cmd, userId });
+      await sendTelegram(env, fromId, `${asks[cmd].prompt}\n\n(type "cancel" to skip)`);
+      return;
+    }
     return;
   }
 
@@ -251,6 +282,31 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     const stay = "phew — staying right here with you 💛";
     if (cbMessageId) await editTelegramMessage(env, fromId, cbMessageId, stay, { inline_keyboard: [[{ text: "🏠 Main Menu", callback_data: "help:m" }]] });
     else await sendTelegram(env, fromId, stay);
+    return;
+  }
+
+  // Input-confirm buttons (await_input → confirm_input flow, state in auth.ts).
+  if (data === "ci:yes" || data === "ci:retype" || data === "ci:no") {
+    const st = await getAuthStateHelper(env, fromId);
+    if (st?.step !== "confirm_input" || !st.cmd) { await answerCallback(env, cbId, "that expired — start again from the menu 🙂"); return; }
+    if (data === "ci:yes") {
+      await clearAuthState(env, fromId);
+      await answerCallback(env, cbId, "✅");
+      await handleUserCommand(env, fromId, `${st.cmd} ${st.value}`, st.userId, "telegram",
+        cbMessageId ? { messageId: cbMessageId, nav: [[{ text: "🏠 Main Menu", callback_data: "help:m" }]] } : undefined);
+    } else if (data === "ci:retype") {
+      await setAuthStateHelper(env, fromId, { step: "await_input", cmd: st.cmd, userId: st.userId });
+      await answerCallback(env, cbId, "✍️");
+      const t = "okay — type it again 👇";
+      if (cbMessageId) await editTelegramMessage(env, fromId, cbMessageId, t, { inline_keyboard: [] });
+      else await sendTelegram(env, fromId, t);
+    } else {
+      await clearAuthState(env, fromId);
+      await answerCallback(env, cbId, "👍");
+      const t = "no problem, cancelled 👍";
+      if (cbMessageId) await editTelegramMessage(env, fromId, cbMessageId, t, { inline_keyboard: [[{ text: "🏠 Main Menu", callback_data: "help:m" }]] });
+      else await sendTelegram(env, fromId, t);
+    }
     return;
   }
 
@@ -427,20 +483,20 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
 
   if (lower.startsWith("!editname ")) {
     const newName = trimmed.slice(10).trim().slice(0, 30);
-    if (!newName) { await sendTelegram(env, chatId, "usage: !editname <name>"); return true; }
+    if (!newName) { await reply("usage: !editname <name>"); return true; }
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     await db(env, `users?id=eq.${userId}`, "PATCH", { display_name: newName });
-    await sendTelegram(env, chatId, `✅ name updated to ${newName}!`);
+    await reply(`✅ name updated to ${newName}!`);
     await sendTelegram(env, env.ADMIN_CHAT_ID, `✏️ Name change: ${u?.identity_code} | ${u?.display_name} → ${newName}`);
     return true;
   }
 
   if (lower.startsWith("!editgmail ")) {
     const newGmail = trimmed.slice(11).trim().toLowerCase();
-    if (!newGmail.includes("@")) { await sendTelegram(env, chatId, "invalid Gmail."); return true; }
+    if (!newGmail.includes("@")) { await reply("hmm, that doesn't look like a valid email — it should look like name@gmail.com"); return true; }
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     await db(env, `users?id=eq.${userId}`, "PATCH", { gmail: newGmail });
-    await sendTelegram(env, chatId, `✅ Gmail updated!`);
+    await reply(`✅ email updated!`);
     await sendTelegram(env, env.ADMIN_CHAT_ID, `✏️ Gmail change: ${u?.identity_code} | ${u?.gmail} → ${newGmail}`);
     return true;
   }
@@ -449,10 +505,10 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     const input = trimmed.slice(9).trim();
     const parsed = parseDOB(input);
     const age = parsed ? calculateAge(parsed) : -1;
-    if (!parsed || age < 5 || age > 120) { await sendTelegram(env, chatId, "couldn't read that date — try: !editdob 15 Jan 2000"); return true; }
+    if (!parsed || age < 5 || age > 120) { await reply("couldn't read that date — try something like 15 Jan 2000"); return true; }
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     await db(env, `users?id=eq.${userId}`, "PATCH", { date_of_birth: parsed });
-    await sendTelegram(env, chatId, `date of birth updated — age set to ${age}`);
+    await reply(`✅ date of birth updated — age set to ${age}`);
     await sendTelegram(env, env.ADMIN_CHAT_ID, `✏️ DOB change: ${u?.identity_code} | ${u?.date_of_birth || "none"} → ${parsed} (age ${age})`);
     return true;
   }
@@ -467,7 +523,7 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     }
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     await db(env, `users?id=eq.${userId}`, "PATCH", { city: newCity });
-    await sendTelegram(env, chatId, `location updated to: ${newCity}`);
+    await reply(`✅ location updated to: ${newCity}`);
     await sendTelegram(env, env.ADMIN_CHAT_ID, `✏️ Location change: ${u?.identity_code} | ${u?.city || "none"} → ${newCity}`);
     return true;
   }
@@ -481,9 +537,9 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
 
   if (lower.startsWith("!remember ")) {
     const mem = trimmed.slice(10).trim();
-    if (!mem) { await sendTelegram(env, chatId, "what should I remember?"); return true; }
+    if (!mem) { await reply("what should I remember?"); return true; }
     await saveMemory(env, userId, "fact", mem, [], 3);
-    await sendTelegram(env, chatId, "noted bestie 🧠✨"); return true;
+    await reply("noted bestie 🧠✨"); return true;
   }
 
   if (lower === "!memories") {
@@ -495,12 +551,12 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
 
   if (lower.startsWith("!forget ")) {
     const arg = trimmed.slice(8).trim();
-    if (arg.toLowerCase() === "all") { await db(env, `memories?user_id=eq.${userId}`, "DELETE"); await sendTelegram(env, chatId, "cleared everything 🗑️"); return true; }
+    if (arg.toLowerCase() === "all") { await db(env, `memories?user_id=eq.${userId}`, "DELETE"); await reply("cleared everything 🗑️"); return true; }
     const mems = await getUserMemories(env, userId);
     const idx = parseInt(arg) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= mems.length) { await sendTelegram(env, chatId, "use !memories to see the list, then !forget <number>"); return true; }
+    if (isNaN(idx) || idx < 0 || idx >= mems.length) { await reply("hmm, I don't have a memory with that number — check the list with !memories"); return true; }
     await db(env, `memories?id=eq.${mems[idx].id}`, "DELETE");
-    await sendTelegram(env, chatId, "poof, gone fr 🗑️"); return true;
+    await reply("poof, gone fr 🗑️"); return true;
   }
 
   if (lower === "!forgotpin") {
@@ -542,7 +598,7 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     const u = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
     await sendTelegram(env, env.ADMIN_CHAT_ID, `💬 Feedback\n\nFrom: ${u?.display_name} (${u?.identity_code})\n\n${msg}`);
     try { await db(env, "feedback", "POST", { user_id: userId, platform, rating: null, user_message: msg, bot_reply: null }); } catch {}
-    await sendTelegram(env, chatId, "ty!! sending it over 🙏💛"); return true;
+    await reply("ty!! sending it over 🙏💛"); return true;
   }
 
   if (lower.startsWith("!search ")) {

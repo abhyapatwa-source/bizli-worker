@@ -4,11 +4,12 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-// v12.34.1 — RUN MORPHS IN PLACE: ▶ Run results now render inside the menu
-// message (command's own buttons merged with Back/Main-Menu rows) — zero extra
-// messages. Settings toggle refreshes its card in place; delete-me confirm/
-// cancel edit in place. Menus stay generated from USER_CARD/ADMIN_CARD.
-export const BIZLI_VERSION = "v12.34.1";
+// v12.35.0 — JUST TYPE THE VALUE + CONFIRM: ✏️ edit buttons and menu ✍️
+// buttons ask conversationally ("what should I call you?"), the next plain
+// message becomes the value, and saving commands confirm first ("set your
+// name to \"Papa\"?" ✅/✏️/❌) before executing. Generic await_input →
+// confirm_input states (auth.ts), cancel word, !/ escape, 10-min expiry.
+export const BIZLI_VERSION = "v12.35.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

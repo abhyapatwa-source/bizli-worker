@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.34.1 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.35.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ### BRAIN-FIRST (since v12.31.0) — the keyword router is DEAD
 Every chat message in every language goes: commands check → brain (callGroq +
@@ -172,6 +172,14 @@ tool backends — nothing else references it.
   help:m · help:c:<g> · help:d:<g>:<i> · help:r:<g>:<i> (run, in commands.ts)
   and adm:menu · adm:c/d/r equivalents. Agent panel = the AGENT realm page
   (adm:c:1); legacy agent:menu / adm:users_cat callbacks redirect there.
+- Input commands (v12.35.0): CardItem.ask + the hcmd asks map set an
+  await_input state ({step, cmd, userId}, 10-min TTL) — the user's next plain
+  message becomes the command's argument (consumed at the top of handleAuth in
+  auth.ts). "cancel" cancels; !/​/ messages drop the wait and run normally;
+  help-menu navigation clears a pending wait. Saving commands (edit*, remember,
+  forget, feedback — CONFIRM_PROMPTS in auth.ts) confirm first: value parks in
+  confirm_input state, ✅/✏️/❌ buttons (ci:* in commands.ts) or typed yes/no;
+  typing a different value re-confirms it. !search runs without confirm.
 - User commands (advertised): !mydetails (edit buttons) · !settings ·
   !logout · !remember/!memories/!forget · !search · !status (anatomy-only,
   NO provider/key names — privacy rule) · !myusage · !support · !feedback ·

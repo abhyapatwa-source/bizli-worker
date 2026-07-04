@@ -49,11 +49,14 @@ export async function blockUser(env: Env, uid: string): Promise<void> {
 //   ADMIN_CARD: "agent:<sub>" / "adm:<action>" dispatch through the existing
 //               edit-in-place menu machinery; "!cmd" goes through handleAdmin.
 //   No run → the detail page shows a "type it like" hint instead of ▶ Run.
+// ask = for commands that need typed input: the ✍️ button sets an await_input
+//       state with this prompt — the user's next plain message becomes the
+//       argument (no "!command" typing needed). Consumed in auth.ts.
 //
 // NOTE: buttons carry array indices — reordering items between deploys makes
 // buttons in old messages point elsewhere; out-of-range ones degrade to the
 // main menu (acceptable).
-type CardItem = { cmd: string; desc: string; btn: string; usage?: string; example?: string; run?: string };
+type CardItem = { cmd: string; desc: string; btn: string; usage?: string; example?: string; run?: string; ask?: string };
 type CardGroup = { group: string; items: CardItem[] };
 
 const USER_CARD: CardGroup[] = [
@@ -63,18 +66,18 @@ const USER_CARD: CardGroup[] = [
     { cmd: "!logout", desc: "log out", btn: "🚪 Logout", run: "!logout" },
   ] },
   { group: "🧠 Memory", items: [
-    { cmd: "!remember <thing>", desc: "I'll never forget it", btn: "💾 Remember", example: "!remember I love mango ice cream" },
+    { cmd: "!remember <thing>", desc: "I'll never forget it", btn: "💾 Remember", example: "!remember I love mango ice cream", ask: "what should I remember? just type it 👇" },
     { cmd: "!memories", desc: "what I know about you", btn: "🧠 Memories", run: "!memories" },
-    { cmd: "!forget <n>", desc: "make me forget", btn: "🗑️ Forget", usage: "!forget <n|all>", example: "!forget 2" },
+    { cmd: "!forget <n>", desc: "make me forget", btn: "🗑️ Forget", usage: "!forget <n|all>", example: "!forget 2", ask: "which memory number should I forget? just type the number (or \"all\") 👇" },
   ] },
   { group: "🔍 Tools", items: [
-    { cmd: "!search <query>", desc: "force a web search", btn: "🔍 Search", example: "!search latest AI news" },
+    { cmd: "!search <query>", desc: "force a web search", btn: "🔍 Search", example: "!search latest AI news", ask: "what should I search for? just type it 👇" },
     { cmd: "!status", desc: "am I feeling okay?", btn: "💚 Status", run: "!status" },
     { cmd: "!myusage", desc: "your daily limits", btn: "📊 My Usage", run: "!myusage" },
   ] },
   { group: "🆘 Help", items: [
     { cmd: "!support <msg>", desc: "reach my developer", btn: "🆘 Support", example: "!support the bot feels slow today", run: "!support" },
-    { cmd: "!feedback <msg>", desc: "tell us anything", btn: "📝 Feedback", example: "!feedback loving the new menus!" },
+    { cmd: "!feedback <msg>", desc: "tell us anything", btn: "📝 Feedback", example: "!feedback loving the new menus!", ask: "tell me anything — just type your feedback 👇" },
     { cmd: "!forgotpin", desc: "PIN reset request", btn: "🔑 Forgot PIN", run: "!forgotpin" },
     { cmd: "!deleteme", desc: "delete my account & data", btn: "❌ Delete Me", run: "!deleteme" },
   ] },
@@ -156,7 +159,9 @@ function detailText(item: CardItem, groupName: string): string {
   const usage = item.usage || item.cmd;
   const ex = item.example || usage;
   return `${groupName}\n\n${item.cmd}\n${item.desc}\n\nUsage: ${usage}\nExample: ${ex}` +
-    (item.run ? `\n\n▶ Tap Run below, or type it yourself.` : `\n\n⌨️ Type it like: ${ex}`);
+    (item.run ? `\n\n▶ Tap Run below, or type it yourself.` :
+     item.ask ? `\n\n✍️ Tap below and just type the value — no command needed.` :
+     `\n\n⌨️ Type it like: ${ex}`);
 }
 
 function adminMainKeyboard() {
@@ -341,6 +346,7 @@ export async function runHelpMenu(env: Env, chatId: string, cmd: string, message
     if (grp && item) {
       const rows: any[] = [];
       if (item.run) rows.push([{ text: "▶ Run", callback_data: `help:r:${g}:${is}` }]);
+      else if (item.ask) rows.push([{ text: "✍️ Type it here", callback_data: `help:a:${g}:${is}` }]);
       rows.push(...navRow(`help:c:${g}`, "help:m", "Main Menu"));
       await show(detailText(item, grp.group), { inline_keyboard: rows });
       return;

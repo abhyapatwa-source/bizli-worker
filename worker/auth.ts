@@ -3,6 +3,31 @@ import { db } from './db';
 import { generateIdentityCode, parseDOB, calculateAge, hashPin } from './utils';
 import { sendTelegram, sendSupportToAdmin, generateImage } from './telegram';
 import { getAuthStateHelper, setAuthStateHelper, clearAuthState, lookupUser } from './memory';
+import { handleUserCommand } from './commands';
+
+// Confirmation wording for saving commands ("just type the value" flows).
+// Commands NOT listed here (e.g. !search) execute immediately without confirm.
+export const CONFIRM_PROMPTS: Record<string, (v: string) => string> = {
+  "!editname": v => `set your name to "${v}"?`,
+  "!editgmail": v => `set your email to "${v}"?`,
+  "!editdob": v => `set your date of birth to "${v}"?`,
+  "!editlocation": v => `set your location to "${v}"?`,
+  "!remember": v => `remember this?\n\n"${v}"`,
+  "!forget": v => v.toLowerCase() === "all" ? "forget EVERYTHING I know about you?" : `forget memory #${v}?`,
+  "!feedback": v => `send this feedback?\n\n"${v}"`,
+};
+
+// Show the confirm card and park the value in state until the user decides
+// (button tap → ci:* in commands.ts, or typed yes/no → handleAuth above).
+export async function askInputConfirm(env: Env, chatId: string, cmd: string, value: string, userId: string): Promise<void> {
+  await setAuthStateHelper(env, chatId, { step: "confirm_input", cmd, value, userId });
+  await sendTelegram(env, chatId, CONFIRM_PROMPTS[cmd]?.(value) || `save "${value}"?`,
+    { reply_markup: { inline_keyboard: [[
+      { text: "✅ Yes, save", callback_data: "ci:yes" },
+      { text: "✏️ Retype", callback_data: "ci:retype" },
+      { text: "❌ Cancel", callback_data: "ci:no" },
+    ]] } });
+}
 
 // Single implementation of the recover entry point — used by handleAuth AND
 // the index.ts pre-auth intercept (so recovery works during maintenance too).
@@ -33,6 +58,51 @@ export async function handleAuth(env: Env, chatId: string, text: string, platfor
     return false;
   };
   const clearStuck = async (stepName: string) => { await env.BIZLI_MEMORY.delete(`stuck_${chatId}_${stepName}`); };
+
+  // "Just type the value" flows (set by ✏️ edit buttons and menu ✍️ buttons):
+  // the next plain message becomes the command's argument — the user never
+  // needs to type "!editname" etc. A ! or / message cancels the wait silently
+  // and runs normally; the state also self-expires after 10 min.
+  // Saving commands get a confirm step first (so users can check their input);
+  // instant ones (search) run straight away.
+  if (state?.step === "await_input" && state.cmd) {
+    await clearAuthState(env, chatId);
+    if (/^(cancel|stop|nevermind|never mind|skip|exit|quit)$/i.test(lower)) {
+      await sendTelegram(env, chatId, "no problem, cancelled 👍");
+      return { handled: true };
+    }
+    if (trimmed.startsWith("!") || trimmed.startsWith("/")) return { handled: false };
+    if (CONFIRM_PROMPTS[state.cmd]) {
+      await askInputConfirm(env, chatId, state.cmd, trimmed, state.userId);
+      return { handled: true };
+    }
+    await handleUserCommand(env, chatId, `${state.cmd} ${trimmed}`, state.userId, platform);
+    return { handled: true };
+  }
+
+  // Confirm step: yes-words save, no-words re-ask, anything else is treated
+  // as a corrected value and re-confirmed. Buttons (ci:yes/retype/no) live in
+  // commands.ts handleCallback and read this same state.
+  if (state?.step === "confirm_input" && state.cmd) {
+    if (/^(y|yes|yeah|yep|yea|ok|okay|sure|confirm|save|haan|ha|hn)$/i.test(lower)) {
+      await clearAuthState(env, chatId);
+      await handleUserCommand(env, chatId, `${state.cmd} ${state.value}`, state.userId, platform);
+      return { handled: true };
+    }
+    if (/^(cancel|stop|nevermind|never mind|exit|quit)$/i.test(lower)) {
+      await clearAuthState(env, chatId);
+      await sendTelegram(env, chatId, "no problem, cancelled 👍");
+      return { handled: true };
+    }
+    if (/^(n|no|nah|nope|nahi)$/i.test(lower)) {
+      await setAuthStateHelper(env, chatId, { step: "await_input", cmd: state.cmd, userId: state.userId });
+      await sendTelegram(env, chatId, "okay — type it again 👇");
+      return { handled: true };
+    }
+    if (trimmed.startsWith("!") || trimmed.startsWith("/")) { await clearAuthState(env, chatId); return { handled: false }; }
+    await askInputConfirm(env, chatId, state.cmd, trimmed, state.userId);
+    return { handled: true };
+  }
 
   if (state?.step && /^(cancel|stop|start over|restart|exit|quit)$/i.test(lower)) {
     await clearAuthState(env, chatId);
