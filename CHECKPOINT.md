@@ -1,6 +1,85 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-04 (BRAIN-FIRST executed + command rearrangement + dashboard 4-chain)
+## Last session: 2026-07-04 evening (NESTED MENUS v12.34.0→v12.36.0 + Supabase access)
+
+### Current production state
+- Version: **v12.36.0** (deployed + /health verified)
+- Maintenance mode: **still ON** (users locked out — Abhya must live-test and
+  turn OFF: CONTROL realm → 🛠️ Maintenance → ✅ OFF, or type !maintenance off)
+- Git: 6 new local commits this session (879b63e docs, b14ed2d v12.34.0,
+  a5ced42 v12.34.1, fed1d7e v12.35.0, a363064 v12.36.0, + this checkpoint).
+  GitHub still diverged/untouched (standing decision — back up remote first).
+
+### What we shipped (v12.33.0 → v12.36.0)
+- **v12.34.0 — NESTED FLASH-CARD MENUS:** !help and !admin are ONE message
+  that morphs in place. USER_CARD/ADMIN_CARD items became objects
+  {cmd,desc,btn,usage?,example?,run?,ask?} — still the single source of truth,
+  all pages/buttons generated. /help → 4 category bubbles → category card
+  (button per command) → detail page (usage+example) with ▶ Run / ⬅ Back /
+  🏠 Main Menu. !admin <pw> → ONE message, 3 realm buttons (PEOPLE/AGENT/
+  CONTROL) + Live Activity + Stats; the old agent panel IS the AGENT realm
+  page now (AGENT_PANEL/BACK_TO_MENU/ADMIN_MENU keyboards deleted, generated
+  instead — can't drift). Callback scheme: help:m/c/d/r + adm:menu/c/d/r;
+  legacy agent:menu, adm:users_cat/comm_cat redirect gracefully; stale
+  index-based buttons degrade to main menu. NEW: /admin <pw> slash alias
+  (NOT in the public / menu). Maintenance detail page = confirm step with
+  ON/OFF buttons.
+- **v12.34.1 — RUN MORPHS IN PLACE:** handleUserCommand gained inPlace param +
+  reply() helper — ▶ Run results render INSIDE the menu message (command's own
+  buttons merged with nav rows, zero extra messages). Settings greet-toggle
+  refreshes its card in place (buildSettingsCard shared builder); !deleteme
+  confirm/cancel edit in place. Typed commands unchanged (send fresh msgs).
+- **v12.35.0 — JUST TYPE THE VALUE + CONFIRM:** ✏️ edit buttons (mydetails)
+  and ✍️ menu buttons ask conversationally ("what should I call you? 👇");
+  the next plain message becomes the argument (await_input state, consumed at
+  top of handleAuth in auth.ts; "cancel" cancels, !/ / drops the wait, 10-min
+  TTL, menu navigation clears pending waits). Saving commands (edit*, remember,
+  forget, feedback — CONFIRM_PROMPTS in auth.ts) confirm first: "set your name
+  to \"Papa\"?" with ✅ Save / ✏️ Retype / ❌ Cancel (ci:* callbacks) or typed
+  yes/no; typing a different value re-confirms it. !search runs instantly.
+  Root cause fixed: user typed "Papa" after an edit hint and the brain ate it.
+- **v12.36.0 — SESSION FRESHNESS (soft, ChatGPT-style):** history_ KV now
+  {ts,msgs}; after >4h away-gap getKVHistory KEEPS old messages but appends a
+  system note ("this was ~Xh ago — greet fresh, don't continue old topics
+  unless the user does"). Note never persisted (appendKVHistory reads raw).
+  One gate = all platforms. 4h kept deliberately (2h would misfire on normal
+  Telegram reply gaps); dial = SESSION_GAP_MS in memory.ts. NOTE: Telegram
+  Bot API cannot see online/offline presence — last-message time is the only
+  away signal.
+- **Supabase access for Claude Code:** personal access token + project ref
+  (bpkfvhcluovzcyozchwj) in gitignored .dev.vars; SQL via Management API
+  (POST /v1/projects/<ref>/database/query). Findings: `test_results` table
+  ALREADY EXISTS with 79 rows (stale "SQL pending" blocker closed — if Tests
+  tab is empty, debug the tab/endpoint); `memories` = 3 rows, 0 embeddings
+  (inconclusive — no traffic since the v12.30.0 fix; re-check after
+  maintenance OFF: `select count(*) from memories where embedding is not null`).
+
+### Abhya's live checks pending (Telegram, before maintenance OFF)
+1. /help → category → command detail → ▶ Run (result morphs in-card) → Back →
+   Main Menu; 💾 Remember → ✍️ Type it here → type value → confirm ✅
+2. My Details → Run → ✏️ Name → type "X" → "set your name to X?" → ✅ saves;
+   "no" re-asks; "cancel" aborts; typed !editname still works
+3. ⚙️ Settings → greet toggle refreshes in place; ❌ Delete Me → "No" morphs
+   to stay-message (DON'T tap Yes on the real account)
+4. /admin <pw> → realm menu; PEOPLE → List Users in place; AGENT → Brain Map/
+   Quota/Test in place with Back/Home; CONTROL → Vault, Maintenance ON/OFF
+5. Typed !agent status / !status / !help unchanged; old buttons in old
+   messages degrade to main menu gracefully
+6. Next morning: Bizli should greet fresh (not continue tonight's topic) but
+   still know facts — session-freshness check
+
+### Other pending
+1. Maintenance OFF decision after live checks (then watch quota — brain-first
+   means every message hits the LLM).
+2. Embeddings re-check in Supabase after real traffic (I can run the SQL now).
+3. GitHub reconcile (standing): back up remote main, then push local as truth.
+4. Disk space: C: still tight (~1GB freed from npm cache; Downloads 3.9GB).
+5. SESSION_GAP_MS tuning if real usage shows 4h is wrong (one-number change).
+6. Automation ideas backlog unchanged (watchdog, daily digest, canary cron…).
+
+---
+
+## Previous session: 2026-07-04 (BRAIN-FIRST executed + command rearrangement + dashboard 4-chain)
 
 ### Current production state
 - Version: **v12.33.0** (deployed + verified: /health, /admin/stats, dashboard markup)
