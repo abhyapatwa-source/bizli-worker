@@ -4,10 +4,11 @@ import { executeTool, BIZLI_TOOLS } from './tools';
 import { sendImageCard, getMoviePoster, getWikiImage } from './telegram';
 import { saveMemory } from './memory';
 
-// v12.33.0 — DASHBOARD 4-PROVIDER CHAIN: Cerebras card + pipeline node added,
-// live Cerebras/OpenRouter model pools wired into Brains + Models tabs,
-// stale hardcoded OpenRouter model replaced with the live pool.
-export const BIZLI_VERSION = "v12.33.0";
+// v12.34.0 — NESTED FLASH-CARD MENUS: !help and !admin are now single messages
+// that morph in place — category bubble buttons → command detail pages with
+// ▶ Run / ⬅ Back / 🏠 Main Menu. Agent panel nested inside the admin AGENT
+// realm. All menus generated from USER_CARD/ADMIN_CARD (single source of truth).
+export const BIZLI_VERSION = "v12.34.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

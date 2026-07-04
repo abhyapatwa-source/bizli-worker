@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.33.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.34.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ### BRAIN-FIRST (since v12.31.0) — the keyword router is DEAD
 Every chat message in every language goes: commands check → brain (callGroq +
@@ -159,9 +159,18 @@ queries (jokes, weather, news, prices, shopping, translate, …) go to the
 brain, which answers natively or calls a tool. apis.ts now contains ONLY
 tool backends — nothing else references it.
 
-## COMMANDS (rearranged v12.32.0 — flash cards)
+## COMMANDS (nested menus since v12.34.0 — flash cards + bubble buttons)
 - Help is generated from single arrays (USER_CARD / ADMIN_CARD in admin.ts).
   When adding/removing a command, update its handler AND the card array.
+- Since v12.34.0 the cards are CardItem objects ({cmd, desc, btn, usage?,
+  example?, run?}) and !help / !admin are ONE message that morphs in place:
+  main menu (category buttons) → category flash card (button per command) →
+  detail page (usage + example) with ▶ Run / ⬅ Back / 🏠 Main Menu.
+  User Run = executes via handleUserCommand as a NEW message (menu intact);
+  admin Run = agent:/adm: actions edit in place. Callback scheme:
+  help:m · help:c:<g> · help:d:<g>:<i> · help:r:<g>:<i> (run, in commands.ts)
+  and adm:menu · adm:c/d/r equivalents. Agent panel = the AGENT realm page
+  (adm:c:1); legacy agent:menu / adm:users_cat callbacks redirect there.
 - User commands (advertised): !mydetails (edit buttons) · !settings ·
   !logout · !remember/!memories/!forget · !search · !status (anatomy-only,
   NO provider/key names — privacy rule) · !myusage · !support · !feedback ·

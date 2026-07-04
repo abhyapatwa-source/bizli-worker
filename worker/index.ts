@@ -215,7 +215,8 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
   // Native / menu aliases (registered with Telegram via setMyCommands) → ! commands
   {
     const firstWord = text.trim().split(/\s+/)[0].toLowerCase().replace(/@[a-z0-9_]+$/i, "");
-    const slashAliases: Record<string, string> = { "/help": "!help", "/settings": "!settings", "/status": "!status", "/support": "!support" };
+    // /admin is aliased but deliberately NOT in the native "/" menu (that menu is visible to every user).
+    const slashAliases: Record<string, string> = { "/help": "!help", "/settings": "!settings", "/status": "!status", "/support": "!support", "/admin": "!admin" };
     if (slashAliases[firstWord]) text = slashAliases[firstWord] + text.trim().slice(text.trim().split(/\s+/)[0].length);
   }
 

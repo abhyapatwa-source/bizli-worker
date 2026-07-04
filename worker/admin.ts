@@ -38,75 +38,89 @@ export async function blockUser(env: Env, uid: string): Promise<void> {
 }
 
 // ── Flash cards (BotFather style) ───────────────────────────────────────────
-// ONE source of truth per card. Help can never drift from reality again:
-// add/remove a command here when you add/remove its handler.
-type CardGroup = { group: string; items: [string, string][] };
+// Card items are the SINGLE source of truth for the help menus: flash-card
+// text, category pages, detail pages, and every bubble button are generated
+// from these arrays. Adding/removing a command = update its handler AND here.
+//
+// run = what the ▶ Run button does.
+//   USER_CARD:  a typed command executed via handleUserCommand — its output
+//               arrives as a NEW message below the menu (the menu is never
+//               edited by Run, so commands with their own keyboards work).
+//   ADMIN_CARD: "agent:<sub>" / "adm:<action>" dispatch through the existing
+//               edit-in-place menu machinery; "!cmd" goes through handleAdmin.
+//   No run → the detail page shows a "type it like" hint instead of ▶ Run.
+//
+// NOTE: buttons carry array indices — reordering items between deploys makes
+// buttons in old messages point elsewhere; out-of-range ones degrade to the
+// main menu (acceptable).
+type CardItem = { cmd: string; desc: string; btn: string; usage?: string; example?: string; run?: string };
+type CardGroup = { group: string; items: CardItem[] };
 
 const USER_CARD: CardGroup[] = [
   { group: "👤 Account", items: [
-    ["!mydetails", "your profile + edit buttons"],
-    ["!settings", "timezone & daily greetings"],
-    ["!logout", "log out"],
+    { cmd: "!mydetails", desc: "your profile + edit buttons", btn: "👤 My Details", run: "!mydetails" },
+    { cmd: "!settings", desc: "timezone & daily greetings", btn: "⚙️ Settings", run: "!settings" },
+    { cmd: "!logout", desc: "log out", btn: "🚪 Logout", run: "!logout" },
   ] },
   { group: "🧠 Memory", items: [
-    ["!remember <thing>", "I'll never forget it"],
-    ["!memories", "what I know about you"],
-    ["!forget <n>", "make me forget"],
+    { cmd: "!remember <thing>", desc: "I'll never forget it", btn: "💾 Remember", example: "!remember I love mango ice cream" },
+    { cmd: "!memories", desc: "what I know about you", btn: "🧠 Memories", run: "!memories" },
+    { cmd: "!forget <n>", desc: "make me forget", btn: "🗑️ Forget", usage: "!forget <n|all>", example: "!forget 2" },
   ] },
   { group: "🔍 Tools", items: [
-    ["!search <query>", "force a web search"],
-    ["!status", "am I feeling okay?"],
-    ["!myusage", "your daily limits"],
+    { cmd: "!search <query>", desc: "force a web search", btn: "🔍 Search", example: "!search latest AI news" },
+    { cmd: "!status", desc: "am I feeling okay?", btn: "💚 Status", run: "!status" },
+    { cmd: "!myusage", desc: "your daily limits", btn: "📊 My Usage", run: "!myusage" },
   ] },
   { group: "🆘 Help", items: [
-    ["!support <msg>", "reach my developer"],
-    ["!feedback <msg>", "tell us anything"],
-    ["!forgotpin", "PIN reset request"],
-    ["!deleteme", "delete my account & data"],
+    { cmd: "!support <msg>", desc: "reach my developer", btn: "🆘 Support", example: "!support the bot feels slow today", run: "!support" },
+    { cmd: "!feedback <msg>", desc: "tell us anything", btn: "📝 Feedback", example: "!feedback loving the new menus!" },
+    { cmd: "!forgotpin", desc: "PIN reset request", btn: "🔑 Forgot PIN", run: "!forgotpin" },
+    { cmd: "!deleteme", desc: "delete my account & data", btn: "❌ Delete Me", run: "!deleteme" },
   ] },
 ];
 
 const ADMIN_CARD: CardGroup[] = [
   { group: "🔐 ADMIN — PEOPLE", items: [
-    ["!users", "list everyone"],
-    ["!userdetails <id>", "one user's full info"],
-    ["!approve <id> · !deny <id>", "waitlist decisions"],
-    ["!block <id> · !unblock <id>", "ban controls"],
-    ["!memory <id> · !wipememory <id>", "view / erase memories"],
-    ["!msg <id> <text>", "DM one user"],
-    ["!broadcast <msg>", "message everyone"],
-    ["!close", "end reply mode"],
+    { cmd: "!users", desc: "list everyone", btn: "👥 List Users", run: "adm:do_users" },
+    { cmd: "!userdetails <id>", desc: "one user's full info", btn: "🪪 User Details", example: "!userdetails BZ-1234" },
+    { cmd: "!approve <id> · !deny <id>", desc: "waitlist decisions", btn: "✅ Approve / Deny", example: "!approve BZ-1234" },
+    { cmd: "!block <id> · !unblock <id>", desc: "ban controls", btn: "🚫 Block / Unblock", example: "!block BZ-1234" },
+    { cmd: "!memory <id> · !wipememory <id>", desc: "view / erase memories", btn: "🧠 User Memory", example: "!memory BZ-1234" },
+    { cmd: "!msg <id> <text>", desc: "DM one user", btn: "💬 DM User", example: "!msg BZ-1234 hello from the dev" },
+    { cmd: "!broadcast <msg>", desc: "message everyone", btn: "📢 Broadcast", example: "!broadcast Bizli gets new powers tonight 🎉" },
+    { cmd: "!close", desc: "end reply mode", btn: "🔚 Close Reply", example: "!close" },
   ] },
   { group: "🤖 AGENT — SYSTEM", items: [
-    ["!agent status", "brain map + overview"],
-    ["!agent quota", "live key usage vs soft limits"],
-    ["!agent test", "canary-test the brain now"],
-    ["!agent models", "live model list"],
-    ["!agent refresh models", "probe all providers"],
-    ["!agent errors", "recent errors"],
-    ["!agent kv", "storage breakdown"],
-    ["!agent uptime", "version + uptime"],
-    ["!agent report", "daily health report"],
-    ["!agent tools", "list the 12 tools"],
-    ["!agent feedback", "user feedback summary"],
-    ["!agent fix lockouts", "clear PIN lockouts"],
-    ["!agent clear cache", "reset caches"],
-    ["!agent clear search", "clear search cache"],
-    ["!agent clear history <uid>", "wipe a chat history"],
-    ["!agent clear session <cid>", "reset an auth session"],
-    ["!agent broadcast test", "responsiveness check"],
+    { cmd: "!agent status", desc: "brain map + overview", btn: "🧠 Brain Map", run: "agent:status" },
+    { cmd: "!agent quota", desc: "live key usage vs soft limits", btn: "📊 Quota", run: "agent:quota" },
+    { cmd: "!agent test", desc: "canary-test the brain now", btn: "🧪 Test Brain", run: "agent:test" },
+    { cmd: "!agent models", desc: "live model list", btn: "📡 Models", run: "agent:models" },
+    { cmd: "!agent refresh models", desc: "probe all providers", btn: "🔄 Refresh Models", run: "agent:refresh models" },
+    { cmd: "!agent errors", desc: "recent errors", btn: "🐛 Errors", run: "agent:errors" },
+    { cmd: "!agent kv", desc: "storage breakdown", btn: "🗂️ KV Storage", run: "agent:kv" },
+    { cmd: "!agent uptime", desc: "version + uptime", btn: "🕐 Uptime", run: "agent:uptime" },
+    { cmd: "!agent report", desc: "daily health report", btn: "📋 Daily Report", run: "agent:report" },
+    { cmd: "!agent tools", desc: "list the 12 tools", btn: "🔧 Tools", run: "agent:tools" },
+    { cmd: "!agent feedback", desc: "user feedback summary", btn: "💬 Feedback", run: "agent:feedback" },
+    { cmd: "!agent fix lockouts", desc: "clear PIN lockouts", btn: "🔓 Fix Lockouts", run: "agent:fix lockouts" },
+    { cmd: "!agent clear cache", desc: "reset caches", btn: "🧹 Clear Cache", run: "agent:clear cache" },
+    { cmd: "!agent clear search", desc: "clear search cache", btn: "🔍 Clear Search", run: "agent:clear search" },
+    { cmd: "!agent clear history <uid>", desc: "wipe a chat history", btn: "🗑️ Clear History", example: "!agent clear history <user-id>" },
+    { cmd: "!agent clear session <cid>", desc: "reset an auth session", btn: "♻️ Clear Session", example: "!agent clear session 123456789" },
+    { cmd: "!agent broadcast test", desc: "responsiveness check", btn: "📣 Broadcast Test", run: "agent:broadcast test" },
   ] },
   { group: "🛠️ CONTROL", items: [
-    ["!maintenance on/off", "lock/unlock the bot"],
-    ["!vault", "Bizli's diary (admin menu → Vault)"],
-    ["!resetmypin", "reset your own PIN"],
-    ["!adminoff", "exit admin mode"],
+    { cmd: "!maintenance on/off", desc: "lock/unlock the bot", btn: "🛠️ Maintenance", usage: "!maintenance on · !maintenance off", example: "!maintenance on" },
+    { cmd: "!vault", desc: "Bizli's diary", btn: "📔 Vault", run: "adm:vault" },
+    { cmd: "!resetmypin", desc: "reset your own PIN", btn: "🔑 Reset My PIN", run: "!resetmypin" },
+    { cmd: "!adminoff", desc: "exit admin mode", btn: "🔒 Exit Admin", run: "adm:exit" },
   ] },
 ];
 
 function renderCard(title: string, card: CardGroup[], footer = ""): string {
   return `${title}\n\n` +
-    card.map(g => `${g.group}\n` + g.items.map(([c, d]) => `${c} — ${d}`).join("\n")).join("\n\n") +
+    card.map(g => `${g.group}\n` + g.items.map(it => `${it.cmd} — ${it.desc}`).join("\n")).join("\n\n") +
     (footer ? `\n\n${footer}` : "");
 }
 
@@ -114,36 +128,52 @@ export function adminCardText(): string {
   return renderCard(`🔐 BIZLI ADMIN — ${BIZLI_VERSION}`, ADMIN_CARD);
 }
 
-const AGENT_PANEL_KEYBOARD = {
-  inline_keyboard: [
-    [{ text: "🧠 Brain Map", callback_data: "agent:status" }, { text: "📊 Quota", callback_data: "agent:quota" }],
-    [{ text: "🧪 Test brain", callback_data: "agent:test" }, { text: "🔧 Tools", callback_data: "agent:tools" }],
-    [{ text: "🐛 Errors", callback_data: "agent:errors" }, { text: "🗂️ KV", callback_data: "agent:kv" }],
-    [{ text: "🔓 Fix lockouts", callback_data: "agent:fix lockouts" }, { text: "🧹 Clear cache", callback_data: "agent:clear cache" }],
-    [{ text: "🔍 Clear search", callback_data: "agent:clear search" }, { text: "📋 Daily report", callback_data: "agent:report" }],
-    [{ text: "📊 Feedback", callback_data: "agent:feedback" }, { text: "🕐 Uptime", callback_data: "agent:uptime" }],
-  ],
-};
+export function getUserCardItem(g: number, i: number): CardItem | null {
+  return USER_CARD[g]?.items[i] || null;
+}
 
-const BACK_TO_MENU_KEYBOARD = {
-  inline_keyboard: [[{ text: "⬅️ Back to menu", callback_data: "agent:menu" }]],
-};
+// --- Menu building blocks (shared by user help + admin menus) ---
 
-const ADMIN_MENU_KEYBOARD = {
-  inline_keyboard: [
-    [{ text: "👥 User Management", callback_data: "adm:users_cat" }],
-    [{ text: "📢 Communication", callback_data: "adm:comm_cat" }],
-    [{ text: "📊 Stats & Storage", callback_data: "adm:stats_cat" }],
-    [{ text: "📈 Live Activity", callback_data: "adm:live_activity" }],
-    [{ text: "🔧 Tools", callback_data: "agent:tools" }, { text: "📔 Vault", callback_data: "adm:vault" }],
-    [{ text: "🏥 System Agent", callback_data: "agent:menu" }],
-    [{ text: "🛠️ Maintenance ON", callback_data: "adm:maint_on" }, { text: "✅ Maintenance OFF", callback_data: "adm:maint_off" }],
+function pairRows(btns: { text: string; callback_data: string }[]): any[] {
+  const rows: any[] = [];
+  for (let i = 0; i < btns.length; i += 2) rows.push(btns.slice(i, i + 2));
+  return rows;
+}
+
+function navRow(backCb: string | null, homeCb: string, homeLabel: string): any[] {
+  const row: any[] = [];
+  if (backCb) row.push({ text: "⬅️ Back", callback_data: backCb });
+  row.push({ text: `🏠 ${homeLabel}`, callback_data: homeCb });
+  return [row];
+}
+
+function categoryPageText(grp: CardGroup): string {
+  return `${grp.group}\n\n` + grp.items.map(it => `${it.cmd} — ${it.desc}`).join("\n") +
+    `\n\n👇 Tap a command for details`;
+}
+
+function detailText(item: CardItem, groupName: string): string {
+  const usage = item.usage || item.cmd;
+  const ex = item.example || usage;
+  return `${groupName}\n\n${item.cmd}\n${item.desc}\n\nUsage: ${usage}\nExample: ${ex}` +
+    (item.run ? `\n\n▶ Tap Run below, or type it yourself.` : `\n\n⌨️ Type it like: ${ex}`);
+}
+
+function adminMainKeyboard() {
+  return { inline_keyboard: [
+    ...ADMIN_CARD.map((grp, g) => [{ text: grp.group, callback_data: `adm:c:${g}` }]),
+    [{ text: "📈 Live Activity", callback_data: "adm:live_activity" }, { text: "📊 Stats & Storage", callback_data: "adm:stats_cat" }],
     [{ text: "🔒 Exit admin", callback_data: "adm:exit" }],
-  ],
-};
+  ] };
+}
 
-function adminBack() {
-  return { inline_keyboard: [[{ text: "⬅️ Back to admin menu", callback_data: "adm:menu" }]] };
+function agentResultKeyboard() {
+  return { inline_keyboard: navRow("adm:c:1", "adm:menu", "Admin Menu") };
+}
+
+function adminBack(backCb = "adm:menu") {
+  if (backCb === "adm:menu") return { inline_keyboard: [[{ text: "🏠 Admin Menu", callback_data: "adm:menu" }]] };
+  return { inline_keyboard: navRow(backCb, "adm:menu", "Admin Menu") };
 }
 
 export async function runAdminMenu(env: Env, chatId: string, cmd: string, messageId?: number): Promise<void> {
@@ -153,46 +183,60 @@ export async function runAdminMenu(env: Env, chatId: string, cmd: string, messag
   };
 
   if (cmd === "menu" || cmd === "") {
-    await show("🔐 Bizli Admin Panel\n\nChoose a category 👇", ADMIN_MENU_KEYBOARD);
-  } else if (cmd === "users_cat") {
-    await show(
-      "👥 User Management\n\n" +
-      "Tap to list users, or type the commands that need an ID:\n" +
-      "• !userdetails <id|BZ-XXXX>\n" +
-      "• !approve <id> / !deny <id>\n" +
-      "• !block <id> / !unblock <id>\n" +
-      "• !memory <id> — view memories\n" +
-      "• !wipememory <id> — wipe memories",
-      { inline_keyboard: [
-        [{ text: "📋 List all users", callback_data: "adm:do_users" }],
-        [{ text: "⬅️ Back to admin menu", callback_data: "adm:menu" }],
-      ] });
+    await show(`🔐 Bizli Admin — ${BIZLI_VERSION}\n\nChoose a realm 👇`, adminMainKeyboard());
+  } else if (cmd.startsWith("c:")) {
+    // Realm page: flash card + one bubble button per command.
+    const g = parseInt(cmd.slice(2));
+    const grp = ADMIN_CARD[g];
+    if (!grp) { await runAdminMenu(env, chatId, "menu", messageId); return; }
+    await show(categoryPageText(grp), { inline_keyboard: [
+      ...pairRows(grp.items.map((it, i) => ({ text: it.btn, callback_data: `adm:d:${g}:${i}` }))),
+      ...navRow(null, "adm:menu", "Admin Menu"),
+    ] });
+  } else if (cmd.startsWith("d:")) {
+    // Command detail page: usage + example + Run (or typed hint).
+    const [gs, is] = cmd.slice(2).split(":");
+    const g = parseInt(gs);
+    const grp = ADMIN_CARD[g];
+    const item = grp?.items[parseInt(is)];
+    if (!grp || !item) { await runAdminMenu(env, chatId, "menu", messageId); return; }
+    const rows: any[] = [];
+    if (item.cmd.startsWith("!maintenance")) {
+      // Detail page doubles as the confirm step — these broadcast to everyone.
+      rows.push([{ text: "🛠️ Maintenance ON", callback_data: "adm:maint_on" }, { text: "✅ Maintenance OFF", callback_data: "adm:maint_off" }]);
+    } else if (item.run) {
+      rows.push([{ text: "▶ Run", callback_data: `adm:r:${g}:${is}` }]);
+    }
+    rows.push(...navRow(`adm:c:${g}`, "adm:menu", "Admin Menu"));
+    await show(detailText(item, grp.group), { inline_keyboard: rows });
+  } else if (cmd.startsWith("r:")) {
+    const [gs, is] = cmd.slice(2).split(":");
+    const run = ADMIN_CARD[parseInt(gs)]?.items[parseInt(is)]?.run;
+    if (!run) { await runAdminMenu(env, chatId, "menu", messageId); return; }
+    if (run.startsWith("agent:")) await runAgentCommand(env, chatId, run.slice(6), messageId);
+    else if (run.startsWith("adm:")) await runAdminMenu(env, chatId, run.slice(4), messageId);
+    else await handleAdmin(env, chatId, run); // typed flows (e.g. !resetmypin) send fresh messages
+  } else if (cmd === "users_cat" || cmd === "comm_cat") {
+    // Legacy buttons in old messages → PEOPLE realm.
+    await runAdminMenu(env, chatId, "c:0", messageId);
   } else if (cmd === "do_users") {
     const users = await db(env, "users?order=created_at.desc&limit=30");
     const lines = (users || []).map((u: any) =>
       `${u.status === "approved" ? "✅" : u.status === "waitlist" ? "⏳" : "❌"} ${u.display_name || "?"} · ${u.identity_code || "?"}${u.is_blocked ? " 🚫" : ""}`);
-    await show(`👥 Users (${users?.length || 0}):\n\n${lines.join("\n") || "(none)"}`, adminBack());
-  } else if (cmd === "comm_cat") {
-    await show(
-      "📢 Communication\n\n" +
-      "Type any of these commands:\n" +
-      "• !broadcast <msg> — message everyone\n" +
-      "• !msg <id> <text> — DM one user",
-      adminBack());
+    await show(`👥 Users (${users?.length || 0}):\n\n${lines.join("\n") || "(none)"}`, adminBack("adm:c:0"));
   } else if (cmd === "stats_cat") {
     await show(
       "📊 Stats & Storage\n\nTap an option 👇",
       { inline_keyboard: [
-        [{ text: "📊 Overall stats", callback_data: "adm:do_stats" }],
-        [{ text: "💾 Storage breakdown", callback_data: "adm:do_storage" }],
-        [{ text: "⬅️ Back to admin menu", callback_data: "adm:menu" }],
+        [{ text: "📊 Overall stats", callback_data: "adm:do_stats" }, { text: "💾 Storage breakdown", callback_data: "adm:do_storage" }],
+        ...navRow(null, "adm:menu", "Admin Menu"),
       ] });
   } else if (cmd === "do_stats") {
     const [allU, appr, wait, msgs, mems] = await Promise.all([
       db(env, "users?select=count"), db(env, "users?status=eq.approved&select=count"),
       db(env, "users?status=eq.waitlist&select=count"), db(env, "messages?select=count"), db(env, "memories?select=count"),
     ]);
-    await show(`📊 Stats\n\n👥 Users: ${allU?.[0]?.count || 0}\n✅ Approved: ${appr?.[0]?.count || 0}\n⏳ Waitlist: ${wait?.[0]?.count || 0}\n💬 Messages: ${msgs?.[0]?.count || 0}\n🧠 Memories: ${mems?.[0]?.count || 0}`, adminBack());
+    await show(`📊 Stats\n\n👥 Users: ${allU?.[0]?.count || 0}\n✅ Approved: ${appr?.[0]?.count || 0}\n⏳ Waitlist: ${wait?.[0]?.count || 0}\n💬 Messages: ${msgs?.[0]?.count || 0}\n🧠 Memories: ${mems?.[0]?.count || 0}`, adminBack("adm:stats_cat"));
   } else if (cmd === "do_storage") {
     const list = await env.BIZLI_MEMORY.list();
     const prefixes: Record<string, number> = {};
@@ -201,7 +245,7 @@ export async function runAdminMenu(env: Env, chatId: string, cmd: string, messag
       prefixes[p] = (prefixes[p] || 0) + 1;
     }
     const lines = Object.entries(prefixes).sort((a, b) => b[1] - a[1]).map(([p, n]) => `• ${p}: ${n}`);
-    await show(`💾 KV Storage (${list.keys?.length || 0} keys)\n\n${lines.join("\n")}`, adminBack());
+    await show(`💾 KV Storage (${list.keys?.length || 0} keys)\n\n${lines.join("\n")}`, adminBack("adm:stats_cat"));
   } else if (cmd === "live_activity") {
     const [users, allMsgs] = await Promise.all([
       db(env, "users?order=last_active.desc&limit=100"),
@@ -251,47 +295,75 @@ export async function runAdminMenu(env: Env, chatId: string, cmd: string, messag
     );
     await show(
       `📔 Bizli's Vault (${entries.length} entries)\n\nTo edit: !vault edit <n> <new text>\n\n${lines}`,
-      { inline_keyboard: [...deleteButtons, [{ text: "⬅️ Back to admin menu", callback_data: "adm:menu" }]] }
+      { inline_keyboard: [...deleteButtons, ...navRow("adm:c:2", "adm:menu", "Admin Menu")] }
     );
   } else if (cmd === "maint_on") {
     await env.BIZLI_MEMORY.put("maintenance_mode", "on");
     const sentOn = await broadcastToTelegram(env, "🛠️ Bizli is currently under maintenance.\nI'll be back online shortly.\nTo reach the developer, type: !support <your message>");
-    await show(`🛠️ Maintenance mode ON — broadcast sent to ${sentOn} users.\n\nAll users (except you) now see a friendly hold message. !support still works for everyone.\n\nTap ✅ Maintenance OFF to restore.`, ADMIN_MENU_KEYBOARD);
+    await show(`🛠️ Maintenance mode ON — broadcast sent to ${sentOn} users.\n\nAll users (except you) now see a friendly hold message. !support still works for everyone.\n\nTap ✅ Maintenance OFF to restore.`, adminMainKeyboard());
   } else if (cmd === "maint_off") {
     await env.BIZLI_MEMORY.delete("maintenance_mode");
     const notifListOff = await env.BIZLI_MEMORY.list({ prefix: "maint_notified_" });
     await Promise.all(notifListOff.keys.map((k: any) => env.BIZLI_MEMORY.delete(k.name)));
     const sentOff = await broadcastToTelegram(env, "✅ Bizli is back online.\nThank you for your patience 💛");
-    await show(`✅ Maintenance mode OFF — broadcast sent to ${sentOff} users. Bizli is live for everyone again 💛`, ADMIN_MENU_KEYBOARD);
+    await show(`✅ Maintenance mode OFF — broadcast sent to ${sentOff} users. Bizli is live for everyone again 💛`, adminMainKeyboard());
   } else if (cmd === "exit") {
     await env.BIZLI_MEMORY.delete(`admin_session_${chatId}`);
     await show("🔒 Admin mode ended. Type !admin <password> to re-enter.", { inline_keyboard: [] });
   }
 }
 
-// One flash card (BotFather style), generated from USER_CARD.
-// Any old help:* button from previous messages also lands here gracefully.
+// Nested flash-card help menu, generated from USER_CARD — ONE message that
+// morphs in place. cmd: "m"/default = main menu (category buttons),
+// "c:<g>" = category page, "d:<g>:<i>" = command detail page.
+// help:r:<g>:<i> (▶ Run) is handled in commands.ts, which owns handleUserCommand.
+// Any old/stale help:* button from previous messages lands on the main menu.
 export async function runHelpMenu(env: Env, chatId: string, cmd: string, messageId?: number): Promise<void> {
-  const text = renderCard("✨ BIZLI — COMMANDS", USER_CARD, "💬 Everything else? Just talk to me — weather, jokes, prices, photos, anything.");
-  const kb = {
-    inline_keyboard: [
-      [{ text: "👤 My Details", callback_data: "hcmd:details" }, { text: "⚙️ Settings", callback_data: "hcmd:settings" }],
-      [{ text: "🆘 Support", callback_data: "hcmd:support" }],
-    ],
+  const show = async (text: string, kb: any) => {
+    if (messageId) await editTelegramMessage(env, chatId, messageId, text, kb);
+    else await sendTelegram(env, chatId, text, { reply_markup: kb });
   };
-  if (messageId) await editTelegramMessage(env, chatId, messageId, text, kb);
-  else await sendTelegram(env, chatId, text, { reply_markup: kb });
+  if (cmd.startsWith("c:")) {
+    const g = parseInt(cmd.slice(2));
+    const grp = USER_CARD[g];
+    if (grp) {
+      await show(categoryPageText(grp), { inline_keyboard: [
+        ...pairRows(grp.items.map((it, i) => ({ text: it.btn, callback_data: `help:d:${g}:${i}` }))),
+        ...navRow(null, "help:m", "Main Menu"),
+      ] });
+      return;
+    }
+  } else if (cmd.startsWith("d:")) {
+    const [gs, is] = cmd.slice(2).split(":");
+    const g = parseInt(gs);
+    const grp = USER_CARD[g];
+    const item = grp?.items[parseInt(is)];
+    if (grp && item) {
+      const rows: any[] = [];
+      if (item.run) rows.push([{ text: "▶ Run", callback_data: `help:r:${g}:${is}` }]);
+      rows.push(...navRow(`help:c:${g}`, "help:m", "Main Menu"));
+      await show(detailText(item, grp.group), { inline_keyboard: rows });
+      return;
+    }
+  }
+  // Main menu — also the graceful fallback for unknown/stale callbacks.
+  await show(
+    "✨ BIZLI — COMMANDS\n\nPick a category 👇\n\n💬 Everything else? Just talk to me — weather, jokes, prices, photos, anything.",
+    { inline_keyboard: USER_CARD.map((grp, g) => [{ text: grp.group, callback_data: `help:c:${g}` }]) }
+  );
 }
 
 export async function runAgentCommand(env: Env, chatId: string, agentCmd: string, messageId?: number): Promise<void> {
-  const out = async (text: string, isMenu: boolean) => {
-    const kb = isMenu ? AGENT_PANEL_KEYBOARD : BACK_TO_MENU_KEYBOARD;
+  // Every agent result edits in place (when tapped) with Back → AGENT realm.
+  const out = async (text: string) => {
+    const kb = agentResultKeyboard();
     if (messageId) await editTelegramMessage(env, chatId, messageId, text, kb);
     else await sendTelegram(env, chatId, text, { reply_markup: kb });
   };
 
   if (agentCmd === "menu") {
-    await out("🏥 Bizli Admin Menu\n\nTap an option below 👇", true);
+    // The AGENT realm page IS the agent panel now (legacy agent:menu buttons land here too).
+    await runAdminMenu(env, chatId, "c:1", messageId);
     return;
   }
   if (!agentCmd || agentCmd === "status") {
@@ -329,7 +401,7 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       `👥 Users: ${allUsers?.[0]?.count || 0} · Approved: ${approved?.[0]?.count || 0} · Waitlist: ${waitlist?.[0]?.count || 0}\n` +
       `💬 Messages: ${msgs?.[0]?.count || 0}\n` +
       `🤖 ${new Date().toUTCString()}`;
-    await out(brainMap, true);
+    await out(brainMap);
   } else if (agentCmd === "clear cache") {
     const users = await db(env, "users?select=id");
     for (const u of users || []) {
@@ -337,26 +409,26 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       await env.BIZLI_MEMORY.delete(`pin_att_${u.id}`);
     }
     await env.BIZLI_MEMORY.delete("groq_status");
-    await out("✅ cache cleared + Groq key cooldowns reset — all keys back online", false);
+    await out("✅ cache cleared + Groq key cooldowns reset — all keys back online");
   } else if (agentCmd === "clear search") {
     const list = await env.BIZLI_MEMORY.list({ prefix: "search_cache_" });
     let n = 0;
     for (const k of list.keys || []) { await env.BIZLI_MEMORY.delete(k.name); n++; }
-    await out(`✅ cleared ${n} cached searches — next searches will be fresh`, false);
+    await out(`✅ cleared ${n} cached searches — next searches will be fresh`);
   } else if (agentCmd.startsWith("clear history ")) {
     const uid = agentCmd.slice(14).trim();
     await env.BIZLI_MEMORY.delete(`history_${uid}`);
-    await sendTelegram(env, chatId, `✅ history cleared for ${uid}`);
+    await out(`✅ history cleared for ${uid}`);
   } else if (agentCmd === "report") {
     await runAgents(env);
-    await out("✅ report sent", false);
+    await out("✅ report sent");
   } else if (agentCmd === "tools") {
     const toolList = BIZLI_TOOLS.map((t: any) => `• ${t.function.name} — ${(t.function.description || "").slice(0, 70)}`).join("\n");
-    await out(`🔧 Active tools (${BIZLI_TOOLS.length}):\n\n${toolList}`, false);
+    await out(`🔧 Active tools (${BIZLI_TOOLS.length}):\n\n${toolList}`);
   } else if (agentCmd === "fix lockouts") {
     const users = await db(env, "users?select=id");
     for (const u of users || []) { await env.BIZLI_MEMORY.delete(`pin_lock_${u.id}`); await env.BIZLI_MEMORY.delete(`pin_att_${u.id}`); }
-    await out("✅ all lockouts cleared", false);
+    await out("✅ all lockouts cleared");
   } else if (agentCmd === "quota") {
     const keys = getGroqKeys(env);
     const gStatus = await getGroqStatus(env);
@@ -379,8 +451,7 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       `soft limits per key+model: 25/min · 5500 tok/min · 900/day\n\n` +
       `${lines}\n\n` +
       `Σ today: ${totalDay} requests across ${keys.length} keys\n` +
-      `⚡ Cerebras / 🌐 OpenRouter: reactive fallbacks (no proactive counters)`,
-      false);
+      `⚡ Cerebras / 🌐 OpenRouter: reactive fallbacks (no proactive counters)`);
   } else if (agentCmd === "test") {
     const t0 = Date.now();
     let reply = "";
@@ -389,8 +460,8 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     const lastRaw = await env.BIZLI_MEMORY.get("last_brains");
     let provider = "unknown";
     try { const arr = lastRaw ? JSON.parse(lastRaw) : []; if (arr[0]?.brain) provider = arr[0].brain; } catch {}
-    if (reply) await out(`🧪 canary PASSED — ${ms}ms via ${provider}\n\nreply: "${reply.slice(0, 150)}"`, false);
-    else await out(`🧪 canary FAILED after ${ms}ms — brain returned nothing. check !agent errors`, false);
+    if (reply) await out(`🧪 canary PASSED — ${ms}ms via ${provider}\n\nreply: "${reply.slice(0, 150)}"`);
+    else await out(`🧪 canary FAILED after ${ms}ms — brain returned nothing. check !agent errors`);
   } else if (agentCmd === "kv") {
     const list = await env.BIZLI_MEMORY.list();
     const keys = list.keys || [];
@@ -400,17 +471,17 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       groups[prefix] = (groups[prefix] || 0) + 1;
     }
     const lines = Object.entries(groups).sort((a, b) => b[1] - a[1]).map(([k, v]) => `  ${k}_*: ${v}`);
-    await out(`🗂️ KV keys: ${keys.length} total\n\n${lines.join("\n") || "(empty)"}`, false);
+    await out(`🗂️ KV keys: ${keys.length} total\n\n${lines.join("\n") || "(empty)"}`);
   } else if (agentCmd === "errors") {
     const errRaw = await env.BIZLI_MEMORY.get("recent_errors");
-    if (!errRaw) { await out("✅ no recent errors logged", false); }
+    if (!errRaw) { await out("✅ no recent errors logged"); }
     else {
       let lines = errRaw;
       try {
         const arr: { ts: string; detail: string }[] = JSON.parse(errRaw);
         if (Array.isArray(arr)) lines = arr.slice(0, 5).map(e => `[${e.ts.slice(0,19)}] ${e.detail}`).join("\n");
       } catch {}
-      await out(`🐛 Recent errors (last 5):\n\n${lines}`, false);
+      await out(`🐛 Recent errors (last 5):\n\n${lines}`);
     }
   } else if (agentCmd === "feedback") {
     const allFb = await db(env, "feedback?order=id.desc&limit=200");
@@ -432,20 +503,20 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
         `• ${(f.user_message || "").slice(0, 80)}`).join("\n");
     }
     if (total === 0 && textFb.length === 0) {
-      await out("📊 Feedback\n\nNo feedback yet. 👍/👎 buttons appear under info/search replies — once users tap them, results show here.", false);
+      await out("📊 Feedback\n\nNo feedback yet. 👍/👎 buttons appear under info/search replies — once users tap them, results show here.");
     } else {
-      await out(`📊 Feedback\n\n👍 ${upCount} · 👎 ${downCount}${total > 0 ? ` · ${pct}% positive` : ""}${downSamples}${textSamples}`, false);
+      await out(`📊 Feedback\n\n👍 ${upCount} · 👎 ${downCount}${total > 0 ? ` · ${pct}% positive` : ""}${downSamples}${textSamples}`);
     }
   } else if (agentCmd === "broadcast test") {
-    await sendTelegram(env, chatId, "✅ agent online and responsive — test successful");
+    await out("✅ agent online and responsive — test successful");
   } else if (agentCmd.startsWith("clear session ")) {
     const cid = agentCmd.slice(14).trim();
     await env.BIZLI_MEMORY.delete(`auth_${cid}`);
     await env.BIZLI_MEMORY.delete(`admin_session_${cid}`);
-    await sendTelegram(env, chatId, `✅ session cleared for ${cid}`);
+    await out(`✅ session cleared for ${cid}`);
   } else if (agentCmd === "uptime") {
     const lastReport = await env.BIZLI_MEMORY.get("last_daily_report");
-    await out(`🕐 Now: ${new Date().toUTCString()}\n📋 Last daily report: ${lastReport ? new Date(parseInt(lastReport)).toUTCString() : "never"}\n🤖 Version: ${BIZLI_VERSION}`, false);
+    await out(`🕐 Now: ${new Date().toUTCString()}\n📋 Last daily report: ${lastReport ? new Date(parseInt(lastReport)).toUTCString() : "never"}\n🤖 Version: ${BIZLI_VERSION}`);
   } else if (agentCmd === "models") {
     const { text, vision } = await getActiveGroqModels(env);
     const lastCheck = await env.BIZLI_MEMORY.get("last_model_check");
@@ -474,9 +545,9 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       `Last probed: ${checkedAt}`,
       `Run "!agent refresh models" to probe now.`,
     ];
-    await out(lines.join("\n"), false);
+    await out(lines.join("\n"));
   } else if (agentCmd === "refresh models") {
-    await out("🔍 Probing all provider model pools — ~20s...", false);
+    await out("🔍 Probing all provider model pools — ~20s...");
     const { groq, gemini, cerebras, openrouter } = await probeAllProviders(env);
     const lines = [
       `✅ Probe complete`,
@@ -497,10 +568,10 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
       ``,
       groq.changed || gemini.changed || cerebras.changed || openrouter.changed ? `⚡ Model lists updated in KV.` : `No change from previous lists.`,
     ];
-    await out(lines.join("\n"), false);
+    await out(lines.join("\n"));
   } else {
-    // Unknown subcommand → the auto-generated admin card (always in sync).
-    await out(adminCardText(), true);
+    // Unknown subcommand → back to the admin main menu.
+    await runAdminMenu(env, chatId, "menu", messageId);
   }
 }
 
@@ -516,7 +587,7 @@ export async function handleAdmin(env: Env, chatId: string, text: string): Promi
     if (env.ADMIN_PASSWORD && pass === env.ADMIN_PASSWORD) {
       await setAdminSession(env, chatId);
       await env.BIZLI_MEMORY.delete(`admin_att_${chatId}`);
-      await sendTelegram(env, chatId, `🔓 Admin mode (15 min)\n\n${adminCardText()}`, { reply_markup: ADMIN_MENU_KEYBOARD });
+      await sendTelegram(env, chatId, `🔓 Admin mode (15 min)\n\n🔐 Bizli Admin — ${BIZLI_VERSION}\n\nChoose a realm 👇`, { reply_markup: adminMainKeyboard() });
     } else {
       const att = parseInt(await env.BIZLI_MEMORY.get(`admin_att_${chatId}`) || "0") + 1;
       if (att >= 3) { await env.BIZLI_MEMORY.put(`admin_lock_${chatId}`, String(Date.now() + 1800000), { expirationTtl: 1900 }); await sendTelegram(env, chatId, "wrong password. 30 min lockout."); }

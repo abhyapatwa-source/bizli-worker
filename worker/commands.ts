@@ -6,7 +6,7 @@ import { isAdminSession, setAuthStateHelper, getKVHistory, getUserMemories, look
 import { searchWeb } from './search';
 import { checkRateLimit, RATE_LIMITS } from './tools';
 import { callGroq, getGroqStatus } from './brain';
-import { runHelpMenu, runAdminMenu, runAgentCommand, approveUser, denyUser, blockUser } from './admin';
+import { runHelpMenu, runAdminMenu, runAgentCommand, approveUser, denyUser, blockUser, getUserCardItem } from './admin';
 
 
 // Shared single implementations — used by handleUserCommand (logged-in users,
@@ -86,8 +86,26 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
   }
 
   if (data.startsWith("help:")) {
+    const payload = data.slice("help:".length);
+    if (payload.startsWith("r:")) {
+      // ▶ Run: execute the card item's command. Output arrives as a NEW
+      // message below the menu — the menu stays intact for further taps.
+      const [, gs, is] = payload.split(":");
+      const item = getUserCardItem(parseInt(gs), parseInt(is));
+      if (item?.run) {
+        const identity = await db(env, `platform_identities?platform=eq.telegram&platform_id=eq.${fromId}&limit=1`);
+        const userId = identity?.[0]?.user_id;
+        if (!userId) { await answerCallback(env, cbId, ""); await sendTelegram(env, fromId, "please log in first"); return; }
+        await answerCallback(env, cbId, "▶️");
+        await handleUserCommand(env, fromId, item.run, userId);
+      } else {
+        await answerCallback(env, cbId, "");
+        await runHelpMenu(env, fromId, "m", cbMessageId);
+      }
+      return;
+    }
     await answerCallback(env, cbId, "");
-    await runHelpMenu(env, fromId, data.slice("help:".length), cbMessageId);
+    await runHelpMenu(env, fromId, payload, cbMessageId);
     return;
   }
 
