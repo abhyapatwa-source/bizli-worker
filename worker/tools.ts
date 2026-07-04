@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import { searchGif } from './utils';
 import { sendTelegramAnimation } from './telegram';
-import { searchWeb, cleanSearchQuery, readUrl } from './search';
+import { searchWeb, readUrl } from './search';
 import { getWeather, getCurrency, getMovie, getTVShow, getCrypto, getStockPrice } from './apis';
 
 export const BIZLI_TOOLS = [
@@ -150,6 +150,16 @@ export async function checkRateLimit(env: Env, chatId: string, feature: keyof ty
 }
 
 export async function executeTool(env: Env, toolName: string, args: any, chatId: string): Promise<string> {
+  // TEMP DIAGNOSTIC (stabilization audit): trace tool calls for /admin/test-chat
+  // probes. Only fires for synthetic "test:" chatIds — zero cost for real users.
+  if (chatId.startsWith("test:")) {
+    try {
+      const k = `trace_${chatId}`;
+      const arr = JSON.parse(await env.BIZLI_MEMORY.get(k) || "[]");
+      arr.push({ tool: toolName, args });
+      await env.BIZLI_MEMORY.put(k, JSON.stringify(arr), { expirationTtl: 300 });
+    } catch {}
+  }
   try {
     switch (toolName) {
       case "get_weather": {
@@ -252,7 +262,8 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
       case "search_web": {
         const rl = await checkRateLimit(env, chatId, "search");
         if (!rl.allowed) return `Search limit reached for now — try again in ${rl.resetInMin} min. (Keeps things fast for everyone!)`;
-        const s = await searchWeb(env, cleanSearchQuery(args.query) || args.query);
+        // The model wrote this query itself — trust it verbatim, never mangle it
+        const s = await searchWeb(env, args.query);
         return s || "No results found";
       }
       case "get_movie_info": {

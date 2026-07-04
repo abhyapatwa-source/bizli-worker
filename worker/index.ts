@@ -37,16 +37,13 @@ import { sha256, calculateAge, isBirthdayToday, detectScript, detectUserTone, to
 import { PRIVACY_HTML, TERMS_HTML, CHAT_HTML } from './html';
 import { sendTelegram, sendTyping, withTyping, downloadTelegramFile, transcribeVoice, sendSupportToAdmin } from './telegram';
 import { getKVHistory, appendKVHistory, getRelevantMemories, lookupUser, setAuthStateHelper } from './memory';
-import { searchWeb, cleanSearchQuery, needsLiveSearch, extractOfficeQuery } from './search';
-import { callGroq, groqExhausted, autoExtractMemory, sanitizePersonaLeaks, appendError, BIZLI_VERSION } from './brain';
+import { callGroq, callCerebras, callOpenRouter, callCloudflareAI, autoExtractMemory, sanitizePersonaLeaks, appendError, BIZLI_VERSION } from './brain';
 import { checkRateLimit } from './tools';
 import { runAgents } from './agents';
 import { handleAdmin } from './admin';
 import { detectIntent, handleUserCommand, handleCallback, sendForgotPinRequest, sendSupportPrompt } from './commands';
 import { handleAuth, startRecoverFlow } from './auth';
 import { handleGroupMessage } from './group';
-import { handleFacebook, handleFacebookVerify } from './facebook';
-import { handleDiscord, handleDiscordRegister } from './discord';
 import { handleAdminStats, handleDashboard, handleWebChat } from './stats';
 import { handleLabAgent } from './lab';
 import { handleLabQuota } from './quota';
@@ -56,10 +53,6 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/telegram") return handleTelegram(request, env, ctx);
-    if (request.method === "POST" && url.pathname === "/facebook") return handleFacebook(request, env);
-    if (request.method === "GET" && url.pathname === "/facebook") return handleFacebookVerify(request, env);
-    if (request.method === "POST" && url.pathname === "/discord") return handleDiscord(request, env, ctx);
-    if (request.method === "GET" && url.pathname === "/discord-register") return handleDiscordRegister(request, env);
     if (request.method === "GET" && url.pathname === "/health") return new Response(JSON.stringify({ status: "ok", version: BIZLI_VERSION }), { headers: { "Content-Type": "application/json" } });
     if (request.method === "GET" && url.pathname === "/admin/stats") return handleAdminStats(request, env);
     if (request.method === "GET" && url.pathname === "/admin/set-menu") {
@@ -87,6 +80,71 @@ export default {
       const { run, passed } = await runBizliTests(env);
       const stats = await getTestStats(env);
       return new Response(JSON.stringify({ run, passed, stats }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (request.method === "POST" && url.pathname === "/admin/test-chat") {
+      // TEMP DIAGNOSTIC (stabilization audit) — full-fidelity probe of the real
+      // chat pipeline with a synthetic user. No history/Supabase writes.
+      // Remove this route after stabilization.
+      if (url.searchParams.get("key") !== env.ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401 });
+      const J = (data: any) => new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+      let body: any;
+      try { body = await request.json(); } catch { return J({ ok: false, error: "bad json" }); }
+      const text = String(body.message || "").trim();
+      if (!text) return J({ ok: false, error: "message required" });
+      const history: any[] = Array.isArray(body.history) ? body.history.slice(-12) : [];
+      const testChatId = "test:" + Math.random().toString(36).slice(2, 10);
+      const t0 = Date.now();
+
+      const memContext = `[CURRENT USER: Test | Member since Jul 2026 | Platform: Telegram | PRIVACY: This is a strictly private 1-on-1 conversation.]`;
+      const scriptHint = detectScript(text);
+      const langLock = `[🔐 LANGUAGE LOCK — THIS MESSAGE IS IN: ${scriptHint}. Match it EXACTLY in your reply. Same script AND same language — an English message gets an ENGLISH reply (never Hindi/Hinglish), a Hindi message gets Hindi. This applies to your FINAL reply even after using a tool. No exceptions — not even if previous messages were in a different language.]`;
+      const toneHint = detectUserTone(text);
+      let forcedContext = todayContext() + "\n" + langLock + (toneHint ? "\n" + toneHint : "") + "\n\n" + memContext;
+      const messages: any[] = [...history, { role: "user", content: text }];
+
+      // Optional vision probe: body.image = public image URL → attached like a
+      // real Telegram photo (mirrors the photo path: tools off, no presearch).
+      let imgAttached = false;
+      if (body.image) {
+        try {
+          const ir = await fetch(String(body.image), { headers: { "User-Agent": "Mozilla/5.0 (BizliAI test probe)" } });
+          if (ir.ok) {
+            const buf = new Uint8Array(await ir.arrayBuffer());
+            let bin = "";
+            for (let o = 0; o < buf.length; o += 8192) bin += String.fromCharCode(...buf.subarray(o, o + 8192));
+            const mime = ir.headers.get("content-type") || "image/jpeg";
+            messages[messages.length - 1] = { role: "user", content: [
+              { type: "text", text },
+              { type: "image_url", image_url: { url: `data:${mime};base64,${btoa(bin)}` } },
+            ] };
+            imgAttached = true;
+          }
+        } catch {}
+      }
+
+      // Forced-fallback probes — persona-leak testing on the secondary brains
+      const force = String(body.force || "");
+      if (force) {
+        let raw = "";
+        if (force === "cerebras") raw = await callCerebras(env, messages, forcedContext);
+        else if (force === "openrouter") raw = await callOpenRouter(env, messages, forcedContext);
+        else if (force === "cf") raw = await callCloudflareAI(env, messages, forcedContext);
+        else return J({ ok: false, error: "force must be cerebras|openrouter|cf" });
+        return J({ ok: true, path: `forced:${force}`, reply: sanitizePersonaLeaks(raw), rawReply: raw, ms: Date.now() - t0 });
+      }
+
+      // Pure brain-first — mirrors the real pipeline exactly (no presearch layer)
+      const path = imgAttached ? "vision" : "brain";
+      const useTools = !imgAttached;
+      const reply = await callGroq(env, messages, forcedContext, testChatId, useTools, false);
+      let toolsUsed: any[] = [];
+      try { toolsUsed = JSON.parse(await env.BIZLI_MEMORY.get(`trace_${testChatId}`) || "[]"); } catch {}
+      let brain = "";
+      try {
+        const lb = JSON.parse(await env.BIZLI_MEMORY.get("last_brains") || "[]");
+        if (lb[0]) brain = lb[0].brain + (lb[0].key !== undefined && lb[0].key !== null ? ` key ${lb[0].key}` : "");
+      } catch {}
+      return J({ ok: true, path, reply, tools: toolsUsed, brain, ms: Date.now() - t0 });
     }
     if (url.pathname === "/lab/agent") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
@@ -342,8 +400,18 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
     return new Response("ok");
   }
 
-  if (await handleUserCommand(env, chatId, text, userId, platform)) return new Response("ok");
-  if (!hasPhoto && !hasSticker && !hasAnimation && await detectIntent(env, text, chatId, userId)) return new Response("ok");
+  // Never-silent guard: a throw inside a command used to vanish without a reply
+  // (the silent /status bug, 2026-07-04) — now it's logged and the user hears back.
+  try {
+    if (await handleUserCommand(env, chatId, text, userId, platform)) return new Response("ok");
+    if (!hasPhoto && !hasSticker && !hasAnimation && await detectIntent(env, text, chatId, userId)) return new Response("ok");
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.error("[Command Error]", errMsg);
+    appendError(env, `cmd chat=${chatId}: ${errMsg.slice(0, 150)}`).catch(() => {});
+    await sendTelegram(env, chatId, "oops, that one hiccupped on my end — try again! 😅");
+    return new Response("ok");
+  }
 
   if (hasPhoto || hasSticker) {
     const rl = await checkRateLimit(env, chatId, "vision");
@@ -428,65 +496,42 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
           useTools = false;
         }
       }
+    } else if (hasAnimation) {
+      // GIF vibe-reading: Telegram animations carry a thumbnail frame — let her
+      // actually SEE the GIF (the vision model also handles tools, so send_gif
+      // still works). Soft rate-limit: if the vision budget is spent, keep the
+      // text placeholder instead of blocking the exchange.
+      const thumbId = msg.animation?.thumbnail?.file_id || null;
+      if (thumbId) {
+        const rlGif = await checkRateLimit(env, chatId, "vision");
+        if (rlGif.allowed) {
+          const file = await downloadTelegramFile(env, thumbId);
+          if (file) {
+            userMessage = {
+              role: "user",
+              content: [
+                { type: "text", text: "[User sent a GIF — this image is a still frame from it. Read the vibe from the frame and react like a real friend (NEVER describe it). Reply with send_gif to match their energy — GIF-for-GIF.]" },
+                { type: "image_url", image_url: { url: `data:${file.mime};base64,${file.base64}` } },
+              ],
+            };
+            historyText = "[sent a GIF]";
+          }
+        }
+      }
     }
 
     const messages = [...kvHistory.map((m: any) => ({ role: m.role, content: m.content })), userMessage];
 
     const scriptHint = detectScript(text);
-    const langLock = `[🔐 LANGUAGE LOCK — THIS MESSAGE IS IN: ${scriptHint}. Match it EXACTLY in your reply. Same script, same language. No exceptions — not even if previous messages were in a different language.]`;
+    const langLock = `[🔐 LANGUAGE LOCK — THIS MESSAGE IS IN: ${scriptHint}. Match it EXACTLY in your reply. Same script AND same language — an English message gets an ENGLISH reply (never Hindi/Hinglish), a Hindi message gets Hindi. This applies to your FINAL reply even after using a tool. No exceptions — not even if previous messages were in a different language.]`;
 
     const toneHint = detectUserTone(text);
-    let forcedContext = todayContext() + "\n" + langLock + (toneHint ? "\n" + toneHint : "") + (memContext ? "\n\n" + memContext : "");
-    let directAnswer = "";
-    if (!hasPhoto && needsLiveSearch(text)) {
-      if (await groqExhausted(env)) {
-        await sendTelegram(env, chatId, "ngl my search tools are taking a lil breather rn 😮‍💨 still here to chat tho! ask me again in a bit for the live stuff 💛");
-        return new Response("ok");
-      }
-      await sendTyping(env, chatId);
-      const typingBeat = setInterval(() => { sendTyping(env, chatId).catch(() => {}); }, 4000);
-      let liveResult = "";
-      try {
-        liveResult = await searchWeb(env, extractOfficeQuery(text) ? text : cleanSearchQuery(text));
-      } finally {
-        clearInterval(typingBeat);
-      }
-      if (liveResult) {
-        await sendTyping(env, chatId);
-        if (extractOfficeQuery(text)) {
-          directAnswer = liveResult
-            .replace(/⚡ CURRENT[^:]*:\s*/i, "")
-            .trim();
-          directAnswer = `Here's the latest 👇\n\n${directAnswer}`;
-        } else {
-          forcedContext = `${memContext}\n\n========================================\n🔴 LIVE SEARCH RESULT (just fetched, ${new Date().toISOString().slice(0, 10)}) — THIS IS THE TRUTH. The user's question is answered by the text below. Your training memory is OLD and WRONG; ignore it completely.\n\n${liveResult}\n========================================\n\nMANDATORY: State the answer from the search above as a confident FACT. If it names a person/winner/price, say that IS the answer — present tense, no hedging. FORBIDDEN phrases you must NEVER use: "I can't verify", "I don't have information", "seems to be", "let me verify", "as of my training", "outdated", "please check official sources", "I recommend checking". The search already verified it. Just tell the user the answer like a confident friend who just looked it up. Only use the source links shown above — invent nothing.`;
-          useTools = false;
-        }
-      } else {
-        forcedContext += `\n\n[⚠️ SEARCH NOTE: You tried to fetch live data for this question but all search sources returned empty. Answer from your best general knowledge, but be upfront — use natural phrasing like "I'm not fully sure about the latest on this, but..." or "from what I know..." — and at the end suggest they do a quick Google search for the freshest info. NEVER invent specific current facts like names, scores, dates, or prices.]`;
-      }
-    }
-
-    if (directAnswer) {
-      const cleaned = sanitizePersonaLeaks(directAnswer);
-      await appendKVHistory(env, userId, "user", historyText);
-      await appendKVHistory(env, userId, "assistant", cleaned);
-      await db(env, "messages", "POST", { user_id: userId, platform, role: "user", content: historyText });
-      await db(env, "messages", "POST", { user_id: userId, platform, role: "assistant", content: cleaned });
-      await db(env, `users?id=eq.${userId}`, "PATCH", { last_active: new Date().toISOString() });
-      let fbKb: any = undefined;
-      try {
-        const fbId = `${Date.now()}`;
-        await env.BIZLI_MEMORY.put(`fb_ctx_${fbId}`, JSON.stringify({ userId, platform, u: historyText.slice(0, 300), r: cleaned.slice(0, 500) }), { expirationTtl: 86400 });
-        fbKb = { reply_markup: { inline_keyboard: [[
-          { text: "👍 accurate", callback_data: `fb:up:${fbId}` },
-          { text: "👎 wrong", callback_data: `fb:down:${fbId}` },
-        ]] } };
-      } catch {}
-      await sendTelegram(env, chatId, cleaned, fbKb);
-      return new Response("ok");
-    }
-
+    const userTz = await env.BIZLI_MEMORY.get(`tz_${userId}`).catch(() => null);
+    let forcedContext = todayContext(userTz || undefined) + "\n" + langLock + (toneHint ? "\n" + toneHint : "") + (memContext ? "\n\n" + memContext : "");
+    // BRAIN-FIRST, fully (the presearch keyword layer is DEAD): every message
+    // goes straight to the model + tools in every language — the model decides
+    // when to search. "Trillions of words — we cannot hardcode everything."
+    // Deep/detailed search output lives in the !search command instead.
     let reply = await withTyping(env, chatId, callGroq(env, messages, forcedContext, chatId, useTools, hasAnimation));
     if (reply === "IMAGE_GENERATED" || reply === "GIF_SENT") return new Response("ok");
     let alreadySent = false;

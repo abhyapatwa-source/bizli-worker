@@ -272,12 +272,15 @@ export function titleCase(s: string): string {
 }
 
 // Always-current date/time context — injected into every AI call so ALL brains
-// (Groq, Gemini, OpenRouter, CloudflareAI) always know the real date.
-export function todayContext(): string {
+// always know the real date. Uses the USER's timezone when known — a user in
+// New York must not be date-shifted by an IST-only clock. IST fallback = status quo.
+export function todayContext(tz?: string): string {
+  let zone = "Asia/Kolkata";
+  if (tz) { try { new Date().toLocaleTimeString("en-US", { timeZone: tz }); zone = tz; } catch {} }
   const now = new Date();
-  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" });
-  const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
-  return `[📅 TODAY: ${dateStr}, ${timeStr} IST — use this as the real current date in ALL your replies]`;
+  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: zone });
+  const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: zone });
+  return `[📅 TODAY for this user: ${dateStr}, ${timeStr} (${zone} local time) — use this as the real current date/time in ALL your replies]`;
 }
 
 export function generateIdentityCode(): string {

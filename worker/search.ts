@@ -10,17 +10,6 @@ export const OFFICE_MAP: Record<string, string> = {
 // Bump this whenever search output format changes — stale cached results auto-invalidate.
 export const SEARCH_CACHE_VERSION = "v6";
 
-export function cleanSearchQuery(text: string): string {
-  let q = text.toLowerCase()
-    .replace(/\b(what|whats|what's|who|whom|whose|where|when|why|how|is|are|was|were|the|of|a|an|do|does|did|can|could|would|should|tell|me|please|about|some|any|there|here|that|this|to|for|in|on|at|i|you|he|she|it|we|they|my|your|recently|currently)\b/gi, " ")
-    .replace(/\b(kya|kaun|kahan|kab|kyun|kaise|hai|ho|tha|the|thi|ka|ki|ke|ko|me|mein|aur|abhi|bata|batao|mujhe|mera|meri|tum|aap|wala|wali|hua|hui|raha|rahi)\b/gi, " ")
-    .replace(/[?!.]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (q.split(" ").filter(Boolean).length < 1) return text;
-  return q;
-}
-
 export function extractOfficeQuery(query: string): { office: string; region: string } | null {
   const q = query.toLowerCase().replace(/\b(current|currently|present|now|abhi|ka|ki|ke|kaun|kon|hai|h|is|the|who)\b/gi, " ").replace(/\s+/g, " ").trim();
   for (const [key, office] of Object.entries(OFFICE_MAP)) {
@@ -32,50 +21,16 @@ export function extractOfficeQuery(query: string): { office: string; region: str
   return null;
 }
 
-export function needsLiveSearch(text: string): boolean {
-  const t = text.toLowerCase().trim();
-  if (t.length < 4) return false;
+// needsLiveSearch() + cleanSearchQuery() DELETED (brain-first, final piece):
+// the model decides when to search in every language — no keyword layer can
+// cover trillions of phrasings. Deep search output = the !search command.
 
-  // Tool-handled — never pre-search
-  if (/\b(weather|temperature|kitni garmi|kitni sardi|baarish|barish)\b/i.test(t)) return false;
-  if (/\b(time in|what time|current time|time zone)\b/i.test(t)) return false;
-  if (/\b(exchange rate|convert currency|usd|eur|gbp|inr to|rupee to|dollar to)\b/i.test(t)) return false;
-  if (/\b(bitcoin price|crypto price|ethereum price|btc price|eth price)\b/i.test(t)) return false;
-
-  // Casual / identity / creative — never need live data
-  if (/^(hi+|hey+|hello+|sup|yo|hola|namaste|namaskar|salaam|salam|ola|ciao|hii+|heyy+|heya)\b/i.test(t)) return false;
-  if (/\b(kya hal|kaise ho|kaisi ho|kaise hain|kaisa hai|how are you|how r u|u ok|how's it going)\b/i.test(t)) return false;
-  if (/\b(good morning|good night|goodnight|good evening|good afternoon|subah|shaam|raat ko)\b/i.test(t)) return false;
-  if (/\b(who are you|what are you|are you (a |an )?(bot|ai|robot|human|girl|boy|real)|tum kaun|tu kaun|tum kya ho|kya tum (ho|hain)|are you real)\b/i.test(t)) return false;
-  if (/\b(tu ladki|tu ladka|tum ladki|tum ladka|ladka hai|ladki hai|gender|male or female|boy or girl)\b/i.test(t)) return false;
-  if (/\b(tell me (a |about a )?(joke|story|poem|shayari|riddle)|make me (laugh|smile)|suna (joke|kahani|shayari)|ek joke|ek poem)\b/i.test(t)) return false;
-  if (/\b(write (me|a|an|something)|generate (a|an)|create (a|an)|make (a|an)|compose|draft)\b/i.test(t)) return false;
-  if (/\b(should i|kya mujhe|kya main|advise me|what do you think about|what would you do|your opinion|tumhara opinion|meri help karo)\b/i.test(t)) return false;
-  if (/\b(recipe|how to (cook|make|prepare|bake)|ingredients for|kaise banaye|kaise banta hai)\b/i.test(t)) return false;
-  if (/\b(relationship|breakup|girlfriend|boyfriend|pyar|mohabbat|marriage|shaadi|love advice)\b/i.test(t)) return false;
-  if (/^[\d\s+\-*/^().%=]+$/.test(t)) return false; // pure math
-  if (/\b(calculate|solve|what is \d|kitna hoga|total of|sum of|percentage of)\b/i.test(t)) return false;
-  if (/\b(explain|define|what does .* mean|meaning of|matlab kya|samjhao|bata do|difference between)\b/i.test(t)) return false;
-
-  // Office holders — always search
-  if (extractOfficeQuery(text)) return true;
-
-  // Hard YES — clearly needs current/live data
-  if (/\b(latest news|breaking news|aaj ki khabar|today's news|abhi kya ho raha|live update)\b/i.test(t)) return true;
-  if (/\b(who won|kaun jeeta|winner|election result|match result|live score|ipl score|world cup)\b/i.test(t)) return true;
-  if (/\b(stock price|share price|nifty|sensex|nasdaq|dow jones|market today)\b/i.test(t)) return true;
-  if (/\b(new (movie|film|show|series|season|album|song) (out|released|launched|dropped))\b/i.test(t)) return true;
-  if (/\b(release date|launch date|kab aayega|kab release|kab aata hai).*(movie|film|show|game|phone|iphone|samsung)\b/i.test(t)) return true;
-  if (/\b(current|latest|abhi|aajkal|right now|2025|2026).*(price|rate|value|news|update|status|result)\b/i.test(t)) return true;
-  if (/\b(price|rate|value|news|update|status|result).*(current|latest|abhi|today|aaj|2025|2026)\b/i.test(t)) return true;
-
-  // Default: no search — trust tools + Groq's knowledge
-  return false;
-}
-
-export async function getGoogleNewsRSS(query: string): Promise<string> {
+export async function getGoogleNewsRSS(query: string, indian = false): Promise<string> {
+  // Edition follows the query — Indian topics get the IN edition, everything
+  // else the neutral US edition. Bizli is global; never India-lock all news.
+  const edition = indian ? "hl=en-IN&gl=IN&ceid=IN:en" : "hl=en-US&gl=US&ceid=US:en";
   try {
-    const res = await fetchTimeout(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`, {}, 4000);
+    const res = await fetchTimeout(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&${edition}`, {}, 4000);
     if (!res || !res.ok) return "";
     const xml = await res.text();
     const items: { title: string; link: string }[] = [];
@@ -130,11 +85,13 @@ export async function tavilySearch(env: Env, body: any): Promise<any | null> {
   for (let i = 0; i < keys.length; i++) {
     const idx = (ptr + i) % keys.length;
     try {
-      const res = await fetch("https://api.tavily.com/search", {
+      // 8s cap per key — without it a slow Tavily key can stall the whole reply
+      const res = await fetchTimeout("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, api_key: keys[idx] }),
-      });
+      }, 8000);
+      if (!res) continue;
       if (res.status === 401 || res.status === 429 || res.status === 432) continue;
       if (!res.ok) continue;
       await env.BIZLI_MEMORY.put("tavily_ptr", String((idx + 1) % keys.length), { expirationTtl: 30 * 86400 }).catch(() => {});
@@ -172,7 +129,8 @@ export async function searchWebUncached(env: Env, query: string): Promise<string
     const title = office.office === "Prime Minister" && /\bindia\b/i.test(office.region)
       ? "Prime Minister of India"
       : `${office.office} of ${titleCase(office.region)}`;
-    const officeNews = await getGoogleNewsRSS(`${title} latest`);
+    const officeIndian = /\b(india|bengal|delhi|mumbai|kolkata|maharashtra|tamil|kerala|gujarat|punjab|bihar|rajasthan|karnataka|telangana|andhra|assam|odisha|uttar|madhya|haryana|jharkhand|chhattisgarh|goa|tripura|manipur)\b/i.test(title);
+    const officeNews = await getGoogleNewsRSS(`${title} latest`, officeIndian);
     if (officeNews) {
       return `⚡ CURRENT — answer the user based ONLY on THESE live news headlines, NOT on your training memory. If they name a new office-holder, that person IS the current one right now:\n${officeNews}`;
     }
@@ -188,7 +146,7 @@ export async function searchWebUncached(env: Env, query: string): Promise<string
   if (/\b\d{6}\b/.test(query) && looksIndian) searchQuery = `${searchQuery} India`;
   try {
     const [news, data] = await Promise.all([
-      isTimeSensitive ? getGoogleNewsRSS(query) : Promise.resolve(""),
+      isTimeSensitive ? getGoogleNewsRSS(query, looksIndian) : Promise.resolve(""),
       tavilySearch(env, {
         query: searchQuery,
         max_results: isTimeSensitive ? 5 : 3,
@@ -199,7 +157,7 @@ export async function searchWebUncached(env: Env, query: string): Promise<string
     const newsBlock = news ? `⚡ CURRENT — base your answer on THESE live news headlines, NOT on your training memory (which is outdated). Report what these say is happening now:\n${news}\n\n` : "";
     if (!data) return newsBlock.trim();
     const answer = data.answer || data.results?.[0]?.content || "";
-    const short = answer.slice(0, 300);
+    const short = answer.slice(0, 500);
     const results = Array.isArray(data.results) ? data.results : [];
     const sourceLinks = results.slice(0, 3).map((r: any) => r.url).filter(Boolean);
     let sourcesBlock = "";

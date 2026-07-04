@@ -10,8 +10,6 @@ export interface Env {
   BIZLI_MEMORY: KVNamespace;
   ADMIN_CHAT_ID: string;
   ADMIN_PASSWORD: string;
-  FB_VERIFY_TOKEN: string;
-  FB_PAGE_ACCESS_TOKEN: string;
   NASA_API_KEY: string;
 
   TAVILY_API_KEY: string;
@@ -40,9 +38,6 @@ export interface Env {
   CEREBRAS_API_KEY_4?: string;
   CEREBRAS_API_KEY_5?: string;
   GUARDIAN_API_KEY?: string;
-  DISCORD_APP_ID?: string;
-  DISCORD_PUBLIC_KEY?: string;
-  DISCORD_BOT_TOKEN?: string;
   GIPHY_API_KEY?: string;
   HF_API_KEY?: string;
   GOOGLE_API_KEY?: string;

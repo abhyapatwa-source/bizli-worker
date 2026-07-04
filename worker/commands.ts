@@ -61,7 +61,8 @@ export async function detectIntent(env: Env, text: string, chatId: string, userI
 
   const imageKw = ["draw ", "paint ", "sketch ", "illustrate ", "create an image", "generate an image", "make a picture", "make an image", "show me a picture of", "create a photo", "!imagine", "!image", "banao image", "image banao", "photo banao", "tasveer banao", "give me a pic of", "give me a photo of", "give me an image of", "show me a pic of", "generate a pic", "make a pic"];
   if (imageKw.some(k => lower.includes(k))) {
-    const prompt = text.replace(/^(draw|paint|sketch|illustrate|create an image of|generate an image of|make a picture of|make an image of|show me a picture of|create a photo of)\s*/i, "").trim();
+    // Strip the verb AND filler ("draw me a golden bird" → "golden bird", not "me a golden bird")
+    const prompt = text.replace(/^(draw|paint|sketch|illustrate|create an image of|generate an image of|make a picture of|make an image of|show me a picture of|create a photo of)\s+(me\s+|us\s+)?(a\s+|an\s+|the\s+)?/i, "").trim();
     if (prompt.length > 2) {
       const rl = await checkRateLimit(env, chatId, "image");
       if (!rl.allowed) {
@@ -602,12 +603,13 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
   }
 
   if (lower.startsWith("!search ")) {
+    // DEEP mode — the one place answers go long. Normal chat stays Snapchat-short.
     const query = trimmed.slice(8).trim();
-    await sendTelegram(env, chatId, "searching... 🔍");
+    await sendTelegram(env, chatId, "searching deep... 🔍");
     const result = await searchWeb(env, query);
     if (result) {
-        const formatted = await callGroq(env, [{ role: "user", content: `Present these search results professionally. Format as 3-5 short bullet points (one key fact each, concise), then list the real source links from the data exactly as shown. No long paragraphs, no filler.\n\nQuery: ${query}\n\nData:\n${result.slice(0, 600)}` }], "");
-        await sendTelegram(env, chatId, formatted || result.slice(0, 500));
+        const formatted = await callGroq(env, [{ role: "user", content: `Present these search results as a DETAILED briefing: 5-8 informative bullet points (a full fact per bullet, with names/numbers/dates where the data has them), a one-line takeaway at the end, then the real source links from the data exactly as shown. Complete sentences only — never stop mid-sentence. No filler.\n\nQuery: ${query}\n\nData:\n${result.slice(0, 1500)}` }], "");
+        await sendTelegram(env, chatId, formatted || result.slice(0, 1200));
     } else { await sendTelegram(env, chatId, "nothing found."); }
     return true;
   }

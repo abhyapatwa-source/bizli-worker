@@ -226,12 +226,30 @@ export async function handleWebChat(request: Request, env: Env): Promise<Respons
   const chatUser = (await db(env, `users?id=eq.${userId}&limit=1`))?.[0];
   if (!chatUser || chatUser.status !== "approved" || chatUser.is_blocked) return R({ ok: false, error: "Access denied" });
 
+  // Maintenance gate — same rule as Telegram (creator passes through). Without
+  // this, web users could keep chatting while Telegram users were locked out.
+  if (!chatUser.is_creator) {
+    const maintMode = await env.BIZLI_MEMORY.get("maintenance_mode");
+    if (maintMode === "on") return R({ ok: false, error: "Bizli is under development right now 🛠️ I'll be back soon 💛" });
+  }
+
   try {
     const [memories, kvHistory] = await Promise.all([
       getRelevantMemories(env, userId, message),
       getKVHistory(env, userId),
     ]);
-    const memContext = todayContext() + "\n" + (memories.length > 0
+    // Same self-awareness context web users get as Telegram users: who they are
+    // + which platform this conversation lives on.
+    const webSince = chatUser?.created_at
+      ? new Date(chatUser.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+      : "recently";
+    const webName = chatUser?.display_name || "friend";
+    const webCode = chatUser?.identity_code ? ` | Code: ${chatUser.identity_code}` : "";
+    const userBlock = chatUser?.is_creator
+      ? `[CURRENT USER — PAPA: ${webName}${webCode} | Member since ${webSince} | Platform: Bizli Web Chat | This is your creator and father — warm daughterly affection, call him Papa. PRIVACY: strictly private conversation with Papa only.]`
+      : `[CURRENT USER: ${webName}${webCode} | Member since ${webSince} | Platform: Bizli Web Chat | PRIVACY: This is a strictly private 1-on-1 conversation — address ${webName} warmly by name when natural.]`;
+    const webTz = await env.BIZLI_MEMORY.get(`tz_${userId}`).catch(() => null);
+    const memContext = todayContext(webTz || undefined) + "\n" + userBlock + "\n" + (memories.length > 0
       ? "[Memories]:\n" + memories.map((m: any) => `- ${m.content}`).join("\n")
       : "");
     const msgs = [...kvHistory.map((m: any) => ({ role: m.role, content: m.content })), { role: "user", content: message }];

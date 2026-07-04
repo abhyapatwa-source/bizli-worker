@@ -18,7 +18,8 @@ function wmoEmoji(code: number): string {
 export async function getWeather(location: string): Promise<string> {
   // Primary: wttr.in (one call, nice format)
   try {
-    const res = await fetchTimeout(`https://wttr.in/${encodeURIComponent(location)}?format=3`, {}, 6000);
+    // &m forces metric (°C) — wttr.in otherwise guesses units from the datacenter's IP (°F)
+    const res = await fetchTimeout(`https://wttr.in/${encodeURIComponent(location)}?format=3&m`, {}, 6000);
     if (res?.ok) {
       const text = (await res.text()).trim();
       // wttr.in sometimes returns error pages with 200 — only accept plausible output
@@ -84,22 +85,64 @@ export async function getCurrency(from: string, to: string, amount: number): Pro
 }
 
 export async function getCrypto(coin: string): Promise<string> {
+  const lower = coin.toLowerCase();
+  const ids: Record<string, string> = {
+    bitcoin: "bitcoin", btc: "bitcoin", ethereum: "ethereum", eth: "ethereum",
+    bnb: "binancecoin", solana: "solana", sol: "solana", dogecoin: "dogecoin",
+    doge: "dogecoin", xrp: "ripple", ripple: "ripple", cardano: "cardano", ada: "cardano",
+  };
+  const syms: Record<string, string> = {
+    bitcoin: "BTC", btc: "BTC", ethereum: "ETH", eth: "ETH", bnb: "BNB",
+    solana: "SOL", sol: "SOL", dogecoin: "DOGE", doge: "DOGE",
+    xrp: "XRP", ripple: "XRP", cardano: "ADA", ada: "ADA",
+  };
+  // Primary: CoinGecko — often rejects Cloudflare Workers' shared IPs, so
+  // fallbacks below matter (found 100% dead in the v12.36.1 audit).
   try {
-    const ids: Record<string, string> = {
-      bitcoin: "bitcoin", btc: "bitcoin", ethereum: "ethereum", eth: "ethereum",
-      bnb: "binancecoin", solana: "solana", sol: "solana", dogecoin: "dogecoin",
-      doge: "dogecoin", xrp: "ripple", ripple: "ripple", cardano: "cardano", ada: "cardano",
-    };
-    const id = ids[coin.toLowerCase()] || coin.toLowerCase();
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd,inr&include_24hr_change=true`);
-    if (!res.ok) return "";
-    const data = await res.json() as any;
-    const p = data[id];
-    if (!p) return "";
-    const change = p.usd_24h_change?.toFixed(2);
-    const arrow = parseFloat(change) >= 0 ? "📈" : "📉";
-    return `${coin.toUpperCase()}: $${p.usd?.toLocaleString()} / ₹${p.inr?.toLocaleString()} ${arrow} ${change}% (24h)`;
-  } catch { return ""; }
+    const id = ids[lower] || lower;
+    const res = await fetchTimeout(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd,inr&include_24hr_change=true`, {}, 5000);
+    if (res?.ok) {
+      const data = await res.json() as any;
+      const p = data[id];
+      if (p?.usd) {
+        const change = p.usd_24h_change?.toFixed(2);
+        const arrow = parseFloat(change) >= 0 ? "📈" : "📉";
+        return `${coin.toUpperCase()}: $${p.usd?.toLocaleString()} / ₹${p.inr?.toLocaleString()} ${arrow} ${change}% (24h)`;
+      }
+    }
+  } catch {}
+  const sym = syms[lower] || (lower.length <= 5 ? coin.toUpperCase() : "");
+  // Fallback 1: CryptoCompare (free, no key, USD+INR in one call)
+  if (sym) {
+    try {
+      const res = await fetchTimeout(`https://min-api.cryptocompare.com/data/price?fsym=${sym}&tsyms=USD,INR`, {}, 5000);
+      if (res?.ok) {
+        const data = await res.json() as any;
+        if (data?.USD) return `${sym}: $${Number(data.USD).toLocaleString()} / ₹${Number(data.INR || 0).toLocaleString()}`;
+      }
+    } catch {}
+    // Fallback 2: Coinbase spot (free, no key, USD only)
+    try {
+      const res = await fetchTimeout(`https://api.coinbase.com/v2/prices/${sym}-USD/spot`, {}, 5000);
+      if (res?.ok) {
+        const data = await res.json() as any;
+        const amt = parseFloat(data?.data?.amount);
+        if (amt) return `${sym}: $${amt.toLocaleString()}`;
+      }
+    } catch {}
+  }
+  return "";
+}
+
+// "Bookable" ≈ in theatres now (released in the last 60 days) OR opening within
+// ~3 weeks (Indian pre-bookings open early). A 2010 movie or one releasing next
+// year must never get a "Book tickets" line.
+function inTheatres(releaseDate?: string): boolean {
+  if (!releaseDate) return false;
+  const t = new Date(releaseDate).getTime();
+  if (isNaN(t)) return false;
+  const daysAgo = (Date.now() - t) / 86400000;
+  return daysAgo < 60 && daysAgo > -21;
 }
 
 export async function getMovie(env: Env, query: string): Promise<string> {
@@ -111,22 +154,24 @@ export async function getMovie(env: Env, query: string): Promise<string> {
       const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}&page=1`);
       if (!res.ok) return "";
       const data = await res.json() as any;
-      const movies = data.results?.filter((m: any) => m.release_date >= "2024-01-01")
+      // Rolling window — "recent/latest" means the last ~13 months, never a hardcoded year
+      const cutoff = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
+      const movies = data.results?.filter((m: any) => m.release_date >= cutoff)
         ?.sort((a: any, b: any) => b.release_date?.localeCompare(a.release_date))
         ?.slice(0, 3);
       if (!movies?.length) {
         const latest = data.results?.[0];
         if (!latest) return "";
-        return `🎬 ${latest.title} (${latest.release_date?.slice(0,4)})\nRating: ⭐ ${latest.vote_average?.toFixed(1)}/10\n${latest.overview?.slice(0, 200)}...\n\n🎟️ Book: https://in.bookmyshow.com/`;
+        return `🎬 ${latest.title} (${latest.release_date?.slice(0,4)})\nRating: ⭐ ${latest.vote_average?.toFixed(1)}/10 (TMDB)\n${latest.overview?.slice(0, 200)}...${inTheatres(latest.release_date) ? "\n\n🎟️ Book (India): https://in.bookmyshow.com/" : ""}`;
       }
-      return movies.map((m: any) => `🎬 ${m.title} (${m.release_date})\n⭐ ${m.vote_average?.toFixed(1)}/10`).join("\n\n") + `\n\n🎟️ Book: https://in.bookmyshow.com/`;
+      return movies.map((m: any) => `🎬 ${m.title} (${m.release_date})\n⭐ ${m.vote_average?.toFixed(1)}/10 (TMDB)`).join("\n\n") + (movies.some((m: any) => inTheatres(m.release_date)) ? `\n\n🎟️ Book (India): https://in.bookmyshow.com/` : "");
     }
     const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(query)}&page=1`);
     if (!res.ok) return "";
     const data = await res.json() as any;
     const movie = data.results?.[0];
     if (!movie) return "";
-    return `🎬 ${movie.title} (${movie.release_date?.slice(0,4)})\nRating: ⭐ ${movie.vote_average?.toFixed(1)}/10\n${movie.overview?.slice(0, 200)}...\n\n🎟️ Book: https://in.bookmyshow.com/`;
+    return `🎬 ${movie.title} (${movie.release_date?.slice(0,4)})\nRating: ⭐ ${movie.vote_average?.toFixed(1)}/10 (TMDB)\n${movie.overview?.slice(0, 200)}...${inTheatres(movie.release_date) ? "\n\n🎟️ Book (India): https://in.bookmyshow.com/" : ""}`;
   } catch { return ""; }
 }
 
