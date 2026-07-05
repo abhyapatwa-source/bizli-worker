@@ -43,10 +43,18 @@ export async function getWeather(location: string): Promise<string> {
   } catch { return ""; }
 }
 
+// Yahoo needs the ^ prefix for indices — models often pass the bare name.
+const INDEX_SYMBOLS: Record<string, string> = {
+  NSEI: "^NSEI", NIFTY: "^NSEI", NIFTY50: "^NSEI", BSESN: "^BSESN", SENSEX: "^BSESN",
+  DJI: "^DJI", DOWJONES: "^DJI", GSPC: "^GSPC", SP500: "^GSPC", IXIC: "^IXIC", NASDAQ: "^IXIC",
+  FTSE: "^FTSE", N225: "^N225", NIKKEI: "^N225", HSI: "^HSI", GDAXI: "^GDAXI", DAX: "^GDAXI",
+};
+
 // Stock price via Yahoo Finance — no API key needed. Tool backend for get_stock_price.
 export async function getStockPrice(symbol: string): Promise<string> {
   try {
-    const s = symbol.toUpperCase().replace(/[^A-Z0-9.^]/g, "");
+    let s = symbol.toUpperCase().replace(/[^A-Z0-9.^]/g, "");
+    if (INDEX_SYMBOLS[s]) s = INDEX_SYMBOLS[s];
     const res = await fetchTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${s}?interval=1d&range=1d`, {
       headers: { "User-Agent": "Mozilla/5.0" },
     }, 6000);

@@ -546,6 +546,10 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
     let alreadySent = false;
     let wasRichCard = false;
     if (reply.startsWith("RICH_SENT:")) { reply = reply.slice(10); alreadySent = true; wasRichCard = true; }
+    // NEVER-SILENT: the persona-leak sanitizer can eat an entire reply (e.g.
+    // an honest self-description that used banned phrasing) — she must never
+    // just go quiet on a user.
+    if (!alreadySent && !reply.trim()) reply = "okay my thoughts scrambled for a sec 😅 say that again?";
     await appendKVHistory(env, userId, "user", historyText);
     await appendKVHistory(env, userId, "assistant", reply);
     await db(env, "messages", "POST", { user_id: userId, platform, role: "user", content: historyText });

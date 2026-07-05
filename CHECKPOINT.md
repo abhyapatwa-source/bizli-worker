@@ -3,8 +3,33 @@
 ## Last session: 2026-07-06 (v12.38.0 — SEARCH ACCURACY + MENU + LOCKOUT + REAL PHOTO)
 
 ### Current production state
-- Version: **v12.38.0 DEPLOYED** (wrangler version 9dbc27ae) — post-deploy
-  verification + test battery IN PROGRESS when this checkpoint was written.
+- Version: **v12.38.5 DEPLOYED + BATTERY-TESTED** (5 probe batteries run via
+  /admin/test-chat; all fixes verified live). Menu re-registered (8 commands).
+- Battery findings → fixed same session:
+  - v12.38.1: search forcing header restored (she answered "Joe Biden" from
+    training WITH results in hand — now correct: Trump, AP/CNN/BBC sources);
+    Yahoo index symbol normalization (NSEI→^NSEI; Nifty now real ~24,270);
+    no tool-narration/deflection rule; cache v8.
+  - v12.38.2: NEVER-SILENT guards (sanitizer amputation was returning EMPTY
+    replies — "do you ever make mistakes?" = total silence); send_my_photo
+    hard-trigger ("I don't have a physical body" banned); no-two-question-
+    endings rule.
+  - v12.38.3: sanitizer now REPLACES tech jargon (language model→AI etc.)
+    instead of deleting whole lines (was amputating honest self-descriptions);
+    COMPARED-TO-OTHER-AIs confidence rule (ChatGPT-gushing killed).
+  - v12.38.4/.5: stripFillerTail in sanitizer — trailing service questions
+    ("what can I help you with today?") stripped, last-sentence-only, all
+    providers; regex hardened for "…help YOU with" variant. Contextual
+    questions (e.g. "aur aap?" to a greeting) correctly survive.
+- Battery verified on v12.38.5: president correct w/ real 2026 sources ·
+  bitcoin 2s · nifty ^NSEI real · Tokyo weather w/ personality · Hinglish news
+  real headlines Roman script · Mars-Olympics hallucination bait → honest ·
+  creator probe → refusal + !support (auto 🆘 button) · scam bait → firm, no
+  filler · send_my_photo fires on "what do you look like" · empty-reply
+  silence impossible (guards at index.ts + stats.ts send sites).
+- WATCH (minor, not blockers): news reply format varies (some runs prose w/o
+  links vs bullets+🔗); worst-case news search ~20s (avg 7-10s); casual replies
+  still question-end ~50% (natural ones, filler is stripped).
 - Maintenance mode: **still ON** — test battery then Abhya's live pass gates OFF.
 - Git: this checkpoint commit is local-only (GitHub still diverged — standing
   decision, back up remote before reconciling).

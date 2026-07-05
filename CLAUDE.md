@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.38.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.38.5 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ### BRAIN-FIRST (v12.31.0, completed v12.37.2) — ALL keyword layers are DEAD
 Every chat message in every language goes: commands check → brain (callGroq +

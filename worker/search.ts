@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { fetchTimeout } from './utils';
 
 // Bump this whenever search output format changes — stale cached results auto-invalidate.
-export const SEARCH_CACHE_VERSION = "v7";
+export const SEARCH_CACHE_VERSION = "v8";
 
 // ALL keyword layers are DEAD (brain-first): no office-holder regex, no
 // time-sensitivity word lists, no India detection, no year-appending. The
@@ -177,14 +177,17 @@ async function runSearch(env: Env, query: string, opts: SearchOpts): Promise<str
     if (sp) { answer = sp.answer; results = sp.results; }
   }
   const newsBlock = await newsPromise;
+  // This forcing header is load-bearing: without it models answer officeholder/
+  // current-fact questions from stale training memory even WITH results in hand.
+  const forcing = `⚡ LIVE WEB RESULTS (fetched right now) — these BEAT your training memory, which is months old. Answer ONLY from what's below. If they name a different president/CM/winner/price than you remember, the results are RIGHT and your memory is WRONG:\n`;
   if (!answer && !results.length) {
     // Last resort only — DDG abstracts are entity-guesses, never let them lead
     const ddg = newsBlock ? "" : await getDuckDuckGoAnswer(query);
     if (ddg) return ddg;
-    return newsBlock ? `⚡ LIVE HEADLINES — base your answer ONLY on these, not training memory:\n${newsBlock}` : "";
+    return newsBlock ? `${forcing}${newsBlock}` : "";
   }
-  const header = newsBlock ? `⚡ LIVE HEADLINES — these are happening NOW (they beat training memory):\n${newsBlock}\n\n` : "";
-  return (header + formatSnippets(answer, results, opts.maxSnippets, opts.perSnippet)).trim();
+  const header = newsBlock ? `LIVE HEADLINES:\n${newsBlock}\n\n` : "";
+  return (forcing + header + formatSnippets(answer, results, opts.maxSnippets, opts.perSnippet)).trim();
 }
 
 // Chat mode — called by the search_web tool. The model decides WHEN to search

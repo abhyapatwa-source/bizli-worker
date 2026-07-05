@@ -260,7 +260,8 @@ export async function handleWebChat(request: Request, env: Env): Promise<Respons
     } else if (reply.startsWith("RICH_SENT:")) {
       reply = reply.slice(10);
     }
-    const cleaned = sanitizePersonaLeaks(reply);
+    // NEVER-SILENT: sanitizer can eat a whole reply — never return an empty one
+    const cleaned = sanitizePersonaLeaks(reply).trim() || "okay my thoughts scrambled for a sec 😅 say that again?";
 
     await Promise.all([
       appendKVHistory(env, userId, "user", message),
