@@ -1,59 +1,67 @@
 import type { Env } from './types';
-import { fetchTimeout, titleCase } from './utils';
-
-export const OFFICE_MAP: Record<string, string> = {
-  "chief minister": "Chief Minister", "cm": "Chief Minister", "mukhyamantri": "Chief Minister",
-  "prime minister": "Prime Minister", "pm": "Prime Minister", "pradhanmantri": "Prime Minister",
-  "president": "President", "governor": "Governor", "mayor": "Mayor",
-};
+import { fetchTimeout } from './utils';
 
 // Bump this whenever search output format changes — stale cached results auto-invalidate.
-export const SEARCH_CACHE_VERSION = "v6";
+export const SEARCH_CACHE_VERSION = "v7";
 
-export function extractOfficeQuery(query: string): { office: string; region: string } | null {
-  const q = query.toLowerCase().replace(/\b(current|currently|present|now|abhi|ka|ki|ke|kaun|kon|hai|h|is|the|who)\b/gi, " ").replace(/\s+/g, " ").trim();
-  for (const [key, office] of Object.entries(OFFICE_MAP)) {
-    let m = q.match(new RegExp(`\\b${key}\\b\\s*(?:of|in)?\\s+([a-z\\s]+?)(?:\\?|$|,|\\.)`, "i"));
-    if (m && m[1].trim().length > 1) return { office, region: m[1].trim() };
-    m = q.match(new RegExp(`([a-z\\s]+?)\\s+${key}\\b`, "i"));
-    if (m && m[1].trim().length > 1) return { office, region: m[1].trim() };
-  }
-  return null;
+// ALL keyword layers are DEAD (brain-first): no office-holder regex, no
+// time-sensitivity word lists, no India detection, no year-appending. The
+// MODEL composes the query in English and passes topic:"news"|"general" via
+// the search_web tool — this file just searches what it's told, well.
+
+// ————— helpers —————
+
+function domainOf(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
-// needsLiveSearch() + cleanSearchQuery() DELETED (brain-first, final piece):
-// the model decides when to search in every language — no keyword layer can
-// cover trillions of phrasings. Deep search output = the !search command.
+// Cut at the last sentence end within max chars — never mid-sentence.
+function cutAtSentence(text: string, max: number): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const slice = t.slice(0, max);
+  const lastEnd = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("! "), slice.lastIndexOf("? "), slice.lastIndexOf("। "));
+  return lastEnd > max * 0.4 ? slice.slice(0, lastEnd + 1).trim() : slice.trim() + "…";
+}
 
-export async function getGoogleNewsRSS(query: string, indian = false): Promise<string> {
-  // Edition follows the query — Indian topics get the IN edition, everything
-  // else the neutral US edition. Bizli is global; never India-lock all news.
-  const edition = indian ? "hl=en-IN&gl=IN&ceid=IN:en" : "hl=en-US&gl=US&ceid=US:en";
+interface SearchResult { title: string; content: string; url: string }
+
+// Google-AI-style grounding block: answer line + numbered titled snippets +
+// sources. The brain synthesizes ACROSS snippets instead of guessing from one blob.
+function formatSnippets(answer: string, results: SearchResult[], maxSnippets: number, perSnippet: number): string {
+  const parts: string[] = [];
+  if (answer) parts.push(`ANSWER: ${cutAtSentence(answer, 350)}`);
+  results.slice(0, maxSnippets).forEach((r, i) => {
+    if (!r.content && !r.title) return;
+    const dom = domainOf(r.url);
+    parts.push(`[${i + 1}] ${r.title}${dom ? ` (${dom})` : ""} — ${cutAtSentence(r.content || "", perSnippet)}`);
+  });
+  const links = results.slice(0, 3).map(r => r.url).filter(Boolean);
+  if (links.length) parts.push(`📎 Sources (share 2-3 so the user can verify):\n` + links.map(u => `🔗 ${u}`).join("\n"));
+  return parts.join("\n");
+}
+
+// ————— data sources —————
+
+export async function getGoogleNewsRSS(query: string): Promise<string> {
+  // Neutral US-English edition; regional focus comes from the query itself
+  // (the model already adds the user's country when relevant — brain-first).
   try {
-    const res = await fetchTimeout(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&${edition}`, {}, 4000);
+    const res = await fetchTimeout(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`, {}, 4000);
     if (!res || !res.ok) return "";
     const xml = await res.text();
-    const items: { title: string; link: string }[] = [];
+    const items: string[] = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let m;
     while ((m = itemRegex.exec(xml)) !== null && items.length < 4) {
-      const block = m[1];
-      const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
-      const linkMatch = block.match(/<link>([\s\S]*?)<\/link>/);
-      if (titleMatch) {
-        items.push({
-          title: titleMatch[1].replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim(),
-          link: linkMatch ? linkMatch[1].trim() : "",
-        });
-      }
+      const titleMatch = m[1].match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
+      if (titleMatch) items.push(titleMatch[1].replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim());
     }
     if (!items.length) return "";
+    // Relevance gate: drop the block entirely if no headline touches the query.
     const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    if (queryWords.length >= 2) {
-      const anyMatch = items.some(i => queryWords.some(w => i.title.toLowerCase().includes(w)));
-      if (!anyMatch) return "";
-    }
-    return items.map(i => `• ${i.title}`).join("\n");
+    if (queryWords.length >= 2 && !items.some(t => queryWords.some(w => t.toLowerCase().includes(w)))) return "";
+    return items.map(t => `• ${t}`).join("\n");
   } catch { return ""; }
 }
 
@@ -74,7 +82,7 @@ export function getTavilyKeys(env: Env): string[] {
     env.TAVILY_API_KEY_4, env.TAVILY_API_KEY_5].filter(Boolean) as string[];
 }
 
-export async function tavilySearch(env: Env, body: any): Promise<any | null> {
+export async function tavilySearch(env: Env, body: any, timeoutMs = 8000): Promise<any | null> {
   const keys = getTavilyKeys(env);
   if (!keys.length) return null;
   let ptr = 0;
@@ -85,12 +93,12 @@ export async function tavilySearch(env: Env, body: any): Promise<any | null> {
   for (let i = 0; i < keys.length; i++) {
     const idx = (ptr + i) % keys.length;
     try {
-      // 8s cap per key — without it a slow Tavily key can stall the whole reply
+      // Per-key time cap — a slow Tavily key must not stall the whole reply
       const res = await fetchTimeout("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, api_key: keys[idx] }),
-      }, 8000);
+      }, timeoutMs);
       if (!res) continue;
       if (res.status === 401 || res.status === 429 || res.status === 432) continue;
       if (!res.ok) continue;
@@ -99,6 +107,26 @@ export async function tavilySearch(env: Env, body: any): Promise<any | null> {
     } catch { continue; }
   }
   return null;
+}
+
+// Serper (Google results) — fallback when all Tavily keys fail, mapped into
+// the same {answer, results} shape so the output format is identical.
+export async function serperSearch(env: Env, query: string, news: boolean): Promise<{ answer: string; results: SearchResult[] } | null> {
+  if (!env.SERPER_API_KEY) return null;
+  try {
+    const res = await fetchTimeout("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "X-API-KEY": env.SERPER_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: query, num: 6, ...(news ? { tbs: "qdr:w" } : {}) }),
+    }, 6000);
+    if (!res || !res.ok) return null;
+    const data = await res.json() as any;
+    const answer = data.answerBox?.answer || data.answerBox?.snippet || data.knowledgeGraph?.description || "";
+    const results: SearchResult[] = (Array.isArray(data.organic) ? data.organic : []).map((r: any) => ({
+      title: r.title || "", content: r.snippet || "", url: r.link || "",
+    }));
+    return (answer || results.length) ? { answer, results } : null;
+  } catch { return null; }
 }
 
 export async function readUrl(url: string): Promise<string> {
@@ -123,62 +151,70 @@ export async function readUrl(url: string): Promise<string> {
   } catch { return ""; }
 }
 
-export async function searchWebUncached(env: Env, query: string): Promise<string> {
-  const office = extractOfficeQuery(query);
-  if (office) {
-    const title = office.office === "Prime Minister" && /\bindia\b/i.test(office.region)
-      ? "Prime Minister of India"
-      : `${office.office} of ${titleCase(office.region)}`;
-    const officeIndian = /\b(india|bengal|delhi|mumbai|kolkata|maharashtra|tamil|kerala|gujarat|punjab|bihar|rajasthan|karnataka|telangana|andhra|assam|odisha|uttar|madhya|haryana|jharkhand|chhattisgarh|goa|tripura|manipur)\b/i.test(title);
-    const officeNews = await getGoogleNewsRSS(`${title} latest`, officeIndian);
-    if (officeNews) {
-      return `⚡ CURRENT — answer the user based ONLY on THESE live news headlines, NOT on your training memory. If they name a new office-holder, that person IS the current one right now:\n${officeNews}`;
-    }
+// ————— the search pipeline —————
+
+interface SearchOpts { depth: "basic" | "advanced"; maxResults: number; news: boolean; maxSnippets: number; perSnippet: number; timeoutMs: number }
+
+async function runSearch(env: Env, query: string, opts: SearchOpts): Promise<string> {
+  // News headlines fetched in parallel (never sequential — latency matters)
+  const newsPromise = opts.news ? getGoogleNewsRSS(query) : Promise.resolve("");
+  let answer = "";
+  let results: SearchResult[] = [];
+  const tv = await tavilySearch(env, {
+    query,
+    max_results: opts.maxResults,
+    search_depth: opts.depth,
+    include_answer: true,
+    ...(opts.news ? { topic: "news" } : {}),
+  }, opts.timeoutMs);
+  if (tv) {
+    answer = tv.answer || "";
+    results = (Array.isArray(tv.results) ? tv.results : []).map((r: any) => ({
+      title: r.title || "", content: r.content || "", url: r.url || "",
+    }));
+  } else {
+    const sp = await serperSearch(env, query, opts.news);
+    if (sp) { answer = sp.answer; results = sp.results; }
   }
-  const isTimeSensitive = /\b(current|currently|latest|now|abhi|today|recent|2025|2026)\b/i.test(query);
-  if (!isTimeSensitive) {
-    const ddg = await getDuckDuckGoAnswer(query);
+  const newsBlock = await newsPromise;
+  if (!answer && !results.length) {
+    // Last resort only — DDG abstracts are entity-guesses, never let them lead
+    const ddg = newsBlock ? "" : await getDuckDuckGoAnswer(query);
     if (ddg) return ddg;
+    return newsBlock ? `⚡ LIVE HEADLINES — base your answer ONLY on these, not training memory:\n${newsBlock}` : "";
   }
-  let searchQuery = isTimeSensitive && !/202[4-9]/.test(query) ? `${query} 2026` : query;
-  const looksIndian = /\b(india|indian|bharat|kolkata|mumbai|delhi|bengal|chennai|bangalore|hyderabad|pune|hindi|rupee|inr)\b/i.test(query) ||
-    /\b(nahi|hai|kya|abhi|mera|meri|kaha|kahan)\b/i.test(query);
-  if (/\b\d{6}\b/.test(query) && looksIndian) searchQuery = `${searchQuery} India`;
-  try {
-    const [news, data] = await Promise.all([
-      isTimeSensitive ? getGoogleNewsRSS(query, looksIndian) : Promise.resolve(""),
-      tavilySearch(env, {
-        query: searchQuery,
-        max_results: isTimeSensitive ? 5 : 3,
-        search_depth: isTimeSensitive ? "advanced" : "basic",
-        include_answer: true,
-      }),
-    ]);
-    const newsBlock = news ? `⚡ CURRENT — base your answer on THESE live news headlines, NOT on your training memory (which is outdated). Report what these say is happening now:\n${news}\n\n` : "";
-    if (!data) return newsBlock.trim();
-    const answer = data.answer || data.results?.[0]?.content || "";
-    const short = answer.slice(0, 500);
-    const results = Array.isArray(data.results) ? data.results : [];
-    const sourceLinks = results.slice(0, 3).map((r: any) => r.url).filter(Boolean);
-    let sourcesBlock = "";
-    if (sourceLinks.length) {
-      sourcesBlock = "\n\n📎 Sources (share 2-3 of these so the user can verify):\n" +
-        sourceLinks.map((u: string) => `🔗 ${u}`).join("\n");
-    }
-    return (newsBlock + `${short}${sourcesBlock}`).trim();
-  } catch { return ""; }
+  const header = newsBlock ? `⚡ LIVE HEADLINES — these are happening NOW (they beat training memory):\n${newsBlock}\n\n` : "";
+  return (header + formatSnippets(answer, results, opts.maxSnippets, opts.perSnippet)).trim();
 }
 
-export async function searchWeb(env: Env, query: string): Promise<string> {
-  const isTimeSensitive = /\b(current|currently|latest|now|abhi|today|recent|live|score)\b/i.test(query);
-  const isOfficeHolder = /\b(cm|chief minister|pm|prime minister|president|governor|mayor|mukhyamantri)\b/i.test(query);
-  const cacheKey = `search_cache_${SEARCH_CACHE_VERSION}_${query.toLowerCase().trim().replace(/\s+/g, "_").slice(0, 90)}`;
+// Chat mode — called by the search_web tool. The model decides WHEN to search
+// and passes topic ("news" for current events). Fast: basic depth, 6s cap.
+export async function searchWeb(env: Env, query: string, topic?: string): Promise<string> {
+  const news = topic === "news";
+  const cacheKey = `search_cache_${SEARCH_CACHE_VERSION}_${news ? "n" : "g"}_${query.toLowerCase().trim().replace(/\s+/g, "_").slice(0, 90)}`;
   const cached = await env.BIZLI_MEMORY.get(cacheKey);
   if (cached) return cached;
-  const result = await searchWebUncached(env, query);
+  const result = await runSearch(env, query, {
+    depth: "basic", maxResults: 5, news, maxSnippets: 4, perSnippet: 280, timeoutMs: 6000,
+  });
   if (result) {
-    const ttl = isOfficeHolder ? 300 : isTimeSensitive ? 900 : 3600;
-    await env.BIZLI_MEMORY.put(cacheKey, result, { expirationTtl: ttl }).catch(() => {});
+    await env.BIZLI_MEMORY.put(cacheKey, result, { expirationTtl: news ? 600 : 3600 }).catch(() => {});
+  }
+  return result;
+}
+
+// Deep mode — the !search command. Real Google-style research material:
+// advanced depth, 8 results, ~4k chars of substance. Own cache, never shares
+// the shallow chat blobs.
+export async function searchWebDeep(env: Env, query: string): Promise<string> {
+  const cacheKey = `searchd_cache_${SEARCH_CACHE_VERSION}_${query.toLowerCase().trim().replace(/\s+/g, "_").slice(0, 90)}`;
+  const cached = await env.BIZLI_MEMORY.get(cacheKey);
+  if (cached) return cached;
+  const result = await runSearch(env, query, {
+    depth: "advanced", maxResults: 8, news: true, maxSnippets: 8, perSnippet: 450, timeoutMs: 8000,
+  });
+  if (result) {
+    await env.BIZLI_MEMORY.put(cacheKey, result, { expirationTtl: 900 }).catch(() => {});
   }
   return result;
 }

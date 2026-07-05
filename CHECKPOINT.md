@@ -1,6 +1,75 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-05 (STABILIZATION AUDIT + v12.37.0→v12.37.2 deployed)
+## Last session: 2026-07-06 (v12.38.0 — SEARCH ACCURACY + MENU + LOCKOUT + REAL PHOTO)
+
+### Current production state
+- Version: **v12.38.0 DEPLOYED** (wrangler version 9dbc27ae) — post-deploy
+  verification + test battery IN PROGRESS when this checkpoint was written.
+- Maintenance mode: **still ON** — test battery then Abhya's live pass gates OFF.
+- Git: this checkpoint commit is local-only (GitHub still diverged — standing
+  decision, back up remote before reconciling).
+- TEMP DIAGNOSTIC still deployed: POST /admin/test-chat (remove after stabilization).
+
+### What we shipped (v12.38.0, all tsc-clean)
+- **SEARCH ACCURACY OVERHAUL (search.ts rewritten)**: brain now receives
+  Google-AI-style grounding — ANSWER line + numbered titled snippets
+  [1][2][3] (4-5 pages, sentence-boundary cuts) + sources, ~1400 chars
+  (was ONE 500-char blob). ALL regex layers inside search.ts DELETED
+  (office-holder map, time-sensitive word lists, looksIndian, " 2026" hack,
+  DDG short-circuit). Model passes topic:"news"|"general" on search_web
+  (tools.ts schema) → Tavily topic/news + parallel Google News RSS + 10-min
+  cache (general = 1h). Chain: Tavily (basic, 6s cap) → NEW serperSearch()
+  (google.serper.dev, real now) → DDG last resort. searchWebDeep() for
+  !search: advanced, 8 results, ~4k chars, own searchd_ cache (15 min).
+  SEARCH_CACHE_VERSION v6→v7.
+- **ChatGPT-style text forming**: sendAnimatedText (telegram.ts) — replies
+  >120 chars appear as opening words growing in ≤5 quick edits (~700ms);
+  keyboards attach on the FINAL edit; wired at index.ts brain-reply send +
+  !search briefing. deleteTelegramMessage() added.
+- **Native menu = 8 commands**: /help /search /settings /memories /status
+  /feedback /support /admin (set-menu route updated — MUST re-run
+  /admin/set-menu?key=<ADMIN_PASSWORD> after deploy). Bare /search /feedback
+  → await_input asks; bare /admin → admin_pw_wait state (password asked
+  conversationally, typed password message DELETED from chat).
+- **Admin lockout v2 (admin.ts)**: 3 wrong passwords → 12h lock w/ 🆘 Support
+  + 🔁 Recover-by-Gmail buttons; recovery gmail must equal admin's registered
+  gmail (users.gmail_hash = tg_<ADMIN_CHAT_ID>) — match clears lock ONLY
+  (password still required); 8 total fails (pw+gmail) → 7-day hard lock;
+  every lock alerts ADMIN_CHAT_ID with 🔓 Unlock button (admunlock: callback,
+  admin-guarded — Abhya's self-rescue). clearAdminLocks/startAdminRecover
+  exported; admrec: callback placed BEFORE the admin guard (locked-out users
+  must reach it).
+- **Brain rules (CRITICAL_RULES)**: search replies = 2-4 bullet highlights +
+  2-3 trusted/official source links; SEARCH-FIRST teaches topic param +
+  synthesize-across-snippets; STATEMENTS > QUESTIONS hard rule (no filler
+  questions to stretch convo — Abhya's complaint); INFO/SEARCH line budget
+  ~7 lines.
+- **HER REAL PHOTO 🐾**: the memorial cat's real photo → KV bizli_real_photo
+  (60KB JPEG, uploaded --remote), served at /bizli-real.jpg; NEW TOOL #13
+  send_my_photo (model-decided: "what do you look like", rare fitting
+  moments, never twice per convo); YOUR REAL PHOTO + CREATOR PRIVACY rules
+  added; any reply mentioning !support auto-gets a 🆘 "reach my developer"
+  flash button (index.ts) — suspicious creator-probing lands on one tap.
+- CLAUDE.md synced (13 tools, snippet-first search, menu, lockout).
+
+### Pending (this session, after checkpoint)
+1. Verify /health + /bizli-real.jpg + re-run /admin/set-menu.
+2. TEST BATTERY via /admin/test-chat: search accuracy (current events,
+   ambiguous entities), latency ≤~8s, no-filler-questions across casual
+   msgs, no hallucination (prices via tools, honest unknowns), photo tool,
+   creator-probe boundary, persona (honest, non-manipulative — Abhya:
+   "she should be like a real AI, Claude-kinda intelligence").
+3. Fix whatever the battery finds; improve if needed.
+4. Then: Abhya live Telegram pass (menus, /admin lockout, animation feel,
+   /search) → maintenance OFF decision.
+5. Carried over: OpenRouter account check; remove /admin/test-chat when
+   stabilization done; GitHub reconcile (backup first); prompt diet
+   (CRITICAL_RULES keeps growing — 413 risk on smaller models); embeddings
+   re-check after real traffic.
+
+---
+
+## Previous session: 2026-07-05 (STABILIZATION AUDIT + v12.37.0→v12.37.2 deployed)
 
 ### Current production state
 - Version: **v12.37.2** (deployed + /health verified + probe-verified)

@@ -34,7 +34,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Runtime:** Cloudflare Workers (TypeScript)
 - **Storage:** Cloudflare KV (namespace BIZLI_MEMORY) + Supabase (PostgreSQL)
 - **AI:** Groq (primary), OpenRouter, Cloudflare Worker AI, Gemini (Lab-only)
-- **Search:** Tavily (5 keys) + Serper fallback
+- **Search:** Tavily (5 keys) → Serper fallback → DDG last resort (snippet-first since v12.38.0)
 
 ### Production
 - **URL:** https://bizli-worker.bizlibix.workers.dev
@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.37.2 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.38.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ### BRAIN-FIRST (v12.31.0, completed v12.37.2) — ALL keyword layers are DEAD
 Every chat message in every language goes: commands check → brain (callGroq +
@@ -50,7 +50,15 @@ BIZLI_TOOLS). `detectIntent()` in commands.ts contains ONLY the
 image-generation flow. The presearch layer (needsLiveSearch/cleanSearchQuery)
 was DELETED in v12.37.2 — the model decides when to search (SEARCH-FIRST rule
 in CRITICAL_RULES; queries composed in English, replies in user's language).
-!search = the deep/detailed search mode; normal chat stays Snapchat-short.
+v12.38.0 finished the job INSIDE search.ts: office-holder regex, time-
+sensitivity word lists, India detection, year-appending — ALL deleted. The
+model passes topic:"news"|"general" on the search_web tool; searchWeb returns
+Google-AI-style numbered titled snippets (ANSWER + [1][2][3] + sources) from
+Tavily → Serper (real now) → DDG last resort. searchWebDeep (the !search
+command) = advanced depth, 8 results, ~4k chars, own 15-min cache. Normal
+search replies = 2-4 bullet highlights + 2-3 official source links; long
+replies animate ChatGPT-style via sendAnimatedText (≤6 message edits;
+keyboards ship on the final edit only).
 Groq pool has NO reasoning models (think-leaks) and NO small-context models
 (413s): gpt-oss-120b, llama-3.3-70b, llama-4-scout(+maverick candidate).
 Vision = llama-4-scout (3.2-previews dead); vision failure = honest "can't
@@ -109,11 +117,11 @@ models auto-drop, new ones auto-adopt. No code edits needed to stay current.
 worker/
   index.ts         (~529 lines) — HTTP routing + cron triggers + pre-auth intercepts
   brain.ts         (~1023 lines) — AI brain, model rotation, quota mgmt, persona
-  tools.ts         (~326 lines) — 12 production tools
+  tools.ts         (~350 lines) — 13 production tools
   commands.ts      (~529 lines) — User commands + callbacks + image-gen intent
   admin.ts         (~640 lines) — Admin commands, flash cards, !agent subcommands
   apis.ts          (~142 lines) — Tool backends only (weather/stock/currency/crypto/movie/tv)
-  search.ts        (~334 lines) — Web search (Tavily + Serper)
+  search.ts        (~220 lines) — Web search (snippet-first; Tavily → Serper → DDG)
   auth.ts          (~291 lines) — User registration + PIN auth
   utils.ts         (~301 lines) — Helpers (key getters, script detection)
   telegram.ts      (~250 lines) — Telegram API wrappers
@@ -156,7 +164,7 @@ worker/
 
 ---
 
-## BIZLI'S 12 ACTIVE TOOLS (in BIZLI_TOOLS)
+## BIZLI'S 13 ACTIVE TOOLS (in BIZLI_TOOLS)
 
 1. **get_weather** — current weather, any location worldwide (wttr.in + open-meteo)
 2. **get_current_time** — time in any city/country (timezone-aware, geocoding fallback)
@@ -170,6 +178,7 @@ worker/
 10. **show_map** — Google Maps URL
 11. **get_crypto_price** — live crypto prices (CoinGecko) — added v12.31.0
 12. **get_stock_price** — live stock/index prices (Yahoo Finance) — added v12.31.0
+13. **send_my_photo** — her ONE real-life photo (the memorial cat), KV `bizli_real_photo` served at /bizli-real.jpg — added v12.38.0. Model-decided (asked "what do you look like" or rare fitting moments). Replies mentioning !support auto-get a 🆘 flash button (index.ts) — covers suspicious creator-probing.
 
 ### Keyword router — DELETED (v12.31.0)
 `detectIntent()` keeps ONLY the image-generation flow. All informational
@@ -206,11 +215,18 @@ tool backends — nothing else references it.
 - Admin realms: !admin = PEOPLE (users/approve/deny/block/msg/broadcast…),
   !agent = SYSTEM (status/quota/test/models/errors/kv/uptime/report/clear…).
   Removed: !ping, !brains, !stats, !storage, !agent users + all aliases.
-- Native / menu: /help /settings /status /support alias to ! commands
+- Native / menu (8 commands since v12.38.0): /help /search /settings
+  /memories /status /feedback /support /admin — all alias to ! commands
   (registered via /admin/set-menu?key=<ADMIN_PASSWORD>, re-run after
-  changing the menu).
+  changing the menu). Bare /search /feedback /admin ask conversationally
+  (await_input / admin_pw_wait states).
 - !admin has NO fallback password since v12.32.0 — fails closed if the
-  ADMIN_PASSWORD secret is unset.
+  ADMIN_PASSWORD secret is unset. Lockout v2 (v12.38.0, admin.ts): 3 wrong
+  passwords → 12h lock (Support + Recover-by-Gmail buttons); recovery gmail
+  must match the admin's registered gmail (clears lock only, password still
+  required); 8 total failed tries (password+gmail) → 7-day hard lock;
+  every lock alerts ADMIN_CHAT_ID with a 🔓 Unlock button (admunlock:
+  callback = Abhya's self-rescue). Typed passwords are deleted from chat.
 - Shared single implementations: sendForgotPinRequest / sendSupportPrompt
   (commands.ts), startRecoverFlow (auth.ts), approveUser/denyUser/blockUser
   (admin.ts) — used by typed commands, buttons, AND the index.ts pre-auth

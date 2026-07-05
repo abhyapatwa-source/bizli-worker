@@ -35,7 +35,7 @@ import type { Env } from './types';
 import { db } from './db';
 import { sha256, calculateAge, isBirthdayToday, detectScript, detectUserTone, todayContext } from './utils';
 import { PRIVACY_HTML, TERMS_HTML, CHAT_HTML } from './html';
-import { sendTelegram, sendTyping, withTyping, downloadTelegramFile, transcribeVoice, sendSupportToAdmin } from './telegram';
+import { sendTelegram, sendAnimatedText, deleteTelegramMessage, sendTyping, withTyping, downloadTelegramFile, transcribeVoice, sendSupportToAdmin } from './telegram';
 import { getKVHistory, appendKVHistory, getRelevantMemories, lookupUser, setAuthStateHelper } from './memory';
 import { callGroq, callCerebras, callOpenRouter, callCloudflareAI, autoExtractMemory, sanitizePersonaLeaks, appendError, BIZLI_VERSION } from './brain';
 import { checkRateLimit } from './tools';
@@ -62,9 +62,13 @@ export default {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commands: [
           { command: "help", description: "all my commands" },
+          { command: "search", description: "deep web search — ask me anything" },
           { command: "settings", description: "timezone & daily greetings" },
+          { command: "memories", description: "what I remember about you" },
           { command: "status", description: "am I feeling okay?" },
+          { command: "feedback", description: "tell my developer what you think" },
           { command: "support", description: "reach my developer" },
+          { command: "admin", description: "admin access (password protected)" },
         ] }),
       });
       return new Response(await res.text(), { headers: { "Content-Type": "application/json" } });
@@ -154,6 +158,12 @@ export default {
       const imgData = await env.BIZLI_MEMORY.get("bizli_cat_image", { type: "arrayBuffer" });
       if (!imgData) return new Response("Not found", { status: 404 });
       return new Response(imgData, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" } });
+    }
+    if (request.method === "GET" && url.pathname === "/bizli-real.jpg") {
+      // Bizli's REAL photo — the actual cat she's named after (memorial).
+      const imgData = await env.BIZLI_MEMORY.get("bizli_real_photo", { type: "arrayBuffer" });
+      if (!imgData) return new Response("Not found", { status: 404 });
+      return new Response(imgData, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
     }
     if (request.method === "GET" && url.pathname === "/bizli-robot.png") {
       const imgData = await env.BIZLI_MEMORY.get("bizli_robot_image", { type: "arrayBuffer" });
@@ -273,8 +283,7 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
   // Native / menu aliases (registered with Telegram via setMyCommands) → ! commands
   {
     const firstWord = text.trim().split(/\s+/)[0].toLowerCase().replace(/@[a-z0-9_]+$/i, "");
-    // /admin is aliased but deliberately NOT in the native "/" menu (that menu is visible to every user).
-    const slashAliases: Record<string, string> = { "/help": "!help", "/settings": "!settings", "/status": "!status", "/support": "!support", "/admin": "!admin" };
+    const slashAliases: Record<string, string> = { "/help": "!help", "/search": "!search", "/settings": "!settings", "/memories": "!memories", "/status": "!status", "/feedback": "!feedback", "/support": "!support", "/admin": "!admin" };
     if (slashAliases[firstWord]) text = slashAliases[firstWord] + text.trim().slice(text.trim().split(/\s+/)[0].length);
   }
 
@@ -309,7 +318,7 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
     }
   }
 
-  if (await handleAdmin(env, chatId, text)) return new Response("ok");
+  if (await handleAdmin(env, chatId, text, msg.message_id)) return new Response("ok");
 
   const authResult = await handleAuth(env, chatId, text, platform);
   if (authResult.handled) return new Response("ok");
@@ -547,7 +556,13 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
 
     if (!alreadySent) {
       let kb: any = undefined;
-      if (isInfoReply) {
+      // Her own reply routing someone to support (e.g. creator-privacy
+      // boundary) gets a one-tap flash button — no typing needed.
+      if (/!support|\/support/i.test(reply)) {
+        kb = { reply_markup: { inline_keyboard: [[
+          { text: "🆘 reach my developer", callback_data: `support_cat:${chatId}|creator` },
+        ]] } };
+      } else if (isInfoReply) {
         try {
           const fbId = `${Date.now()}`;
           await env.BIZLI_MEMORY.put(`fb_ctx_${fbId}`, JSON.stringify({ userId, platform, u: historyText.slice(0, 300), r: reply.slice(0, 500) }), { expirationTtl: 86400 });
@@ -557,7 +572,8 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
           ]] } };
         } catch {}
       }
-      await sendTelegram(env, chatId, reply, kb);
+      // ChatGPT-style text forming; feedback buttons attach on the final edit
+      await sendAnimatedText(env, chatId, reply, kb);
     }
     setTimeout(() => autoExtractMemory(env, userId, text, reply).catch(() => {}), 0);
   } catch (err: any) {

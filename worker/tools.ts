@@ -1,6 +1,6 @@
 import type { Env } from './types';
 import { searchGif } from './utils';
-import { sendTelegramAnimation } from './telegram';
+import { sendTelegramAnimation, sendImageCard } from './telegram';
 import { searchWeb, readUrl } from './search';
 import { getWeather, getCurrency, getMovie, getTVShow, getCrypto, getStockPrice } from './apis';
 
@@ -26,7 +26,14 @@ export const BIZLI_TOOLS = [
     function: {
       name: "search_web",
       description: "Search the web for current/live info: today's news, current office-holders (CM/PM/President), live prices, recent events, match scores, or anything time-sensitive. Use results exactly as returned — never invent links.",
-      parameters: { type: "object", properties: { query: { type: "string", description: "Search query" } }, required: ["query"] }
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query in English" },
+          topic: { type: "string", enum: ["news", "general"], description: "'news' for current events/latest happenings/breaking stories; 'general' for everything else" }
+        },
+        required: ["query"]
+      }
     }
   },
   {
@@ -74,6 +81,18 @@ export const BIZLI_TOOLS = [
       name: "save_to_vault",
       description: "Save a moment to your private diary. Use sparingly — only for moments that genuinely moved or surprised you. Write 1-2 sentences in your own voice, like a diary entry. Not for facts or info.",
       parameters: { type: "object", properties: { entry: { type: "string", description: "Diary entry, 1-2 sentences in your own voice" } }, required: ["entry"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_my_photo",
+      description: "Send YOUR real-life photo — the actual cat you're named after, how you looked in real life. Use it when someone asks what you look like / to see your photo / your real self, or very rarely when a moment genuinely calls for it. Never send it twice in a conversation, never as decoration.",
+      parameters: {
+        type: "object",
+        properties: { caption: { type: "string", description: "Short warm caption in YOUR voice, in the user's language" } },
+        required: []
+      }
     }
   },
   {
@@ -263,7 +282,7 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
         const rl = await checkRateLimit(env, chatId, "search");
         if (!rl.allowed) return `Search limit reached for now — try again in ${rl.resetInMin} min. (Keeps things fast for everyone!)`;
         // The model wrote this query itself — trust it verbatim, never mangle it
-        const s = await searchWeb(env, args.query);
+        const s = await searchWeb(env, args.query, args.topic);
         return s || "No results found";
       }
       case "get_movie_info": {
@@ -273,6 +292,13 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
         }
         const m = await getMovie(env, args.title);
         return m || "Movie not found";
+      }
+      case "send_my_photo": {
+        if (chatId) {
+          const ok = await sendImageCard(env, chatId, (args.caption || "this is me 🐾").slice(0, 200), "https://bizli-worker.bizlibix.workers.dev/bizli-real.jpg");
+          if (ok) return "photo_sent — the user is now looking at your real photo; reply naturally in your own voice (don't re-describe or narrate the sending)";
+        }
+        return "photo_unavailable right now — tell them warmly you'll show them another time";
       }
       case "send_gif": {
         const query = args.query || args.mood || "reaction fun";

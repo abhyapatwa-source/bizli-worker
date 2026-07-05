@@ -1,12 +1,12 @@
 import type { Env } from './types';
 import { db } from './db';
 import { getGroqKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB } from './utils';
-import { sendTelegram, editTelegramMessage, answerCallback, sendSupportToAdmin } from './telegram';
+import { sendTelegram, sendAnimatedText, editTelegramMessage, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAuthStateHelper, getAuthStateHelper, clearAuthState, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
-import { searchWeb } from './search';
+import { searchWebDeep } from './search';
 import { checkRateLimit, RATE_LIMITS } from './tools';
 import { callGroq, getGroqStatus } from './brain';
-import { runHelpMenu, runAdminMenu, runAgentCommand, approveUser, denyUser, blockUser, getUserCardItem } from './admin';
+import { runHelpMenu, runAdminMenu, runAgentCommand, approveUser, denyUser, blockUser, getUserCardItem, startAdminRecover, clearAdminLocks } from './admin';
 
 
 // Shared single implementations — used by handleUserCommand (logged-in users,
@@ -311,7 +311,22 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     return;
   }
 
+  if (data.startsWith("admrec:")) {
+    // Recover-by-gmail entry — must work for the LOCKED-OUT chat (any user)
+    await answerCallback(env, cbId, "");
+    await startAdminRecover(env, fromId);
+    return;
+  }
+
   if (fromId !== env.ADMIN_CHAT_ID) { await answerCallback(env, cbId, "Not authorized."); return; }
+
+  if (data.startsWith("admunlock:")) {
+    const target = data.slice(10);
+    await clearAdminLocks(env, target);
+    await answerCallback(env, cbId, "🔓 unlocked");
+    await sendTelegram(env, fromId, `🔓 admin locks cleared for chat ${target}.`);
+    return;
+  }
 
   const colonIdx = data.indexOf(":");
   const action = data.slice(0, colonIdx);
@@ -602,14 +617,26 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     await reply("ty!! sending it over 🙏💛"); return true;
   }
 
+  // Bare menu taps (/search, /feedback) → conversational ask; the next plain
+  // message becomes the argument (await_input, consumed in auth.ts).
+  if (lower === "!search" || lower === "!feedback") {
+    const prompts: Record<string, string> = {
+      "!search": "what should I search for? just type it 👇",
+      "!feedback": "tell me anything — just type your feedback 👇",
+    };
+    await setAuthStateHelper(env, chatId, { step: "await_input", cmd: lower, userId });
+    await reply(`${prompts[lower]}\n\n(type "cancel" to skip)`);
+    return true;
+  }
+
   if (lower.startsWith("!search ")) {
     // DEEP mode — the one place answers go long. Normal chat stays Snapchat-short.
     const query = trimmed.slice(8).trim();
     await sendTelegram(env, chatId, "searching deep... 🔍");
-    const result = await searchWeb(env, query);
+    const result = await searchWebDeep(env, query);
     if (result) {
-        const formatted = await callGroq(env, [{ role: "user", content: `Present these search results as a DETAILED briefing: 5-8 informative bullet points (a full fact per bullet, with names/numbers/dates where the data has them), a one-line takeaway at the end, then the real source links from the data exactly as shown. Complete sentences only — never stop mid-sentence. No filler.\n\nQuery: ${query}\n\nData:\n${result.slice(0, 1500)}` }], "");
-        await sendTelegram(env, chatId, formatted || result.slice(0, 1200));
+        const formatted = await callGroq(env, [{ role: "user", content: `Present these search results as a DETAILED briefing: 5-8 informative bullet points (a full fact per bullet, with names/numbers/dates where the data has them), a one-line takeaway at the end, then 2-3 of the real source links from the data exactly as shown — prefer official/primary sources (government, official sites, major outlets) first. Complete sentences only — never stop mid-sentence. No filler, no invented links.\n\nQuery: ${query}\n\nData:\n${result.slice(0, 4000)}` }], "");
+        await sendAnimatedText(env, chatId, formatted || result.slice(0, 1200));
     } else { await sendTelegram(env, chatId, "nothing found."); }
     return true;
   }

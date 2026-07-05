@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import { db } from './db';
 import { getGroqKeys, getGeminiKeys, getCerebrasKeys, getOpenRouterKeys } from './utils';
-import { sendTelegram, editTelegramMessage, broadcastToTelegram, answerCallback, sendSupportToAdmin } from './telegram';
+import { sendTelegram, editTelegramMessage, deleteTelegramMessage, broadcastToTelegram, answerCallback, sendSupportToAdmin } from './telegram';
 import { isAdminSession, setAdminSession, lookupUser, setAuthStateHelper, getUserMemories } from './memory';
 import { getGroqStatus, BIZLI_VERSION, getActiveGroqModels, getActiveCerebrasModels, getActiveOpenRouterModels, probeAllProviders, callGroq } from './brain';
 import { BIZLI_TOOLS } from './tools';
@@ -104,7 +104,7 @@ const ADMIN_CARD: CardGroup[] = [
     { cmd: "!agent kv", desc: "storage breakdown", btn: "🗂️ KV Storage", run: "agent:kv" },
     { cmd: "!agent uptime", desc: "version + uptime", btn: "🕐 Uptime", run: "agent:uptime" },
     { cmd: "!agent report", desc: "daily health report", btn: "📋 Daily Report", run: "agent:report" },
-    { cmd: "!agent tools", desc: "list the 12 tools", btn: "🔧 Tools", run: "agent:tools" },
+    { cmd: "!agent tools", desc: "list the 13 tools", btn: "🔧 Tools", run: "agent:tools" },
     { cmd: "!agent feedback", desc: "user feedback summary", btn: "💬 Feedback", run: "agent:feedback" },
     { cmd: "!agent fix lockouts", desc: "clear PIN lockouts", btn: "🔓 Fix Lockouts", run: "agent:fix lockouts" },
     { cmd: "!agent clear cache", desc: "reset caches", btn: "🧹 Clear Cache", run: "agent:clear cache" },
@@ -581,24 +581,140 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
   }
 }
 
-export async function handleAdmin(env: Env, chatId: string, text: string): Promise<boolean> {
+// ——— Admin gate v2 (v12.38.0): 12h lock after 3 wrong passwords, recover by
+// gmail, hard lock (7 days) after 8 total failed attempts, admin alerts. ———
+
+const ADMIN_MAX_ATTEMPTS = 8;      // passwords + gmail tries combined
+const ADMIN_LOCK_MS = 43200000;    // 12h
+const ADMIN_HARDLOCK_TTL = 604800; // 7 days
+
+function adminLockKeyboard(chatId: string): any {
+  return { reply_markup: { inline_keyboard: [
+    [{ text: "🆘 Support", callback_data: `support_cat:${chatId}|adminlock` }],
+    [{ text: "🔁 Recover by Gmail", callback_data: `admrec:${chatId}` }],
+  ] } };
+}
+
+async function alertAdminLock(env: Env, chatId: string, att: number, kind: string): Promise<void> {
+  await sendTelegram(env, env.ADMIN_CHAT_ID,
+    `⚠️ Admin lockout: chat ${chatId} — ${att} failed attempts (${kind}).`,
+    { reply_markup: { inline_keyboard: [[{ text: "🔓 Unlock", callback_data: `admunlock:${chatId}` }]] } });
+}
+
+// One failed try (wrong password OR wrong recovery gmail). Escalation:
+// 3+ password fails → 12h lock · 8 total fails → 7-day hard lock.
+async function adminFailedAttempt(env: Env, chatId: string, kind: "password" | "gmail"): Promise<void> {
+  const att = parseInt(await env.BIZLI_MEMORY.get(`admin_att_${chatId}`) || "0") + 1;
+  await env.BIZLI_MEMORY.put(`admin_att_${chatId}`, String(att), { expirationTtl: 43200 });
+  if (att >= ADMIN_MAX_ATTEMPTS) {
+    await env.BIZLI_MEMORY.put(`admin_hardlock_${chatId}`, "1", { expirationTtl: ADMIN_HARDLOCK_TTL });
+    await env.BIZLI_MEMORY.delete(`admin_recover_wait_${chatId}`);
+    await sendTelegram(env, chatId, "🔒 too many failed attempts — admin access is fully locked. contact !support.");
+    await alertAdminLock(env, chatId, att, "HARD LOCK, 7 days");
+  } else if (kind === "password" && att >= 3) {
+    await env.BIZLI_MEMORY.put(`admin_lock_${chatId}`, String(Date.now() + ADMIN_LOCK_MS), { expirationTtl: 43500 });
+    await sendTelegram(env, chatId, "wrong password — admin login is locked for 12 hours.", adminLockKeyboard(chatId));
+    await alertAdminLock(env, chatId, att, "12h lock");
+  } else if (kind === "gmail") {
+    await sendTelegram(env, chatId, `that's not it. ${ADMIN_MAX_ATTEMPTS - att} tries left before a full lock — type the gmail again, or "cancel".`);
+  } else {
+    await sendTelegram(env, chatId, `wrong. ${3 - att} left.`);
+  }
+}
+
+async function attemptAdminPassword(env: Env, chatId: string, pass: string, messageId?: number): Promise<void> {
+  // The typed password never sits in chat history
+  if (messageId) await deleteTelegramMessage(env, chatId, messageId);
+  if (await env.BIZLI_MEMORY.get(`admin_hardlock_${chatId}`)) {
+    await sendTelegram(env, chatId, "🔒 admin access is locked. contact !support."); return;
+  }
+  const lockVal = await env.BIZLI_MEMORY.get(`admin_lock_${chatId}`);
+  if (lockVal && Date.now() < parseInt(lockVal)) {
+    const hrs = Math.max(1, Math.ceil((parseInt(lockVal) - Date.now()) / 3600000));
+    await sendTelegram(env, chatId, `🔒 admin login is locked (~${hrs}h left).`, adminLockKeyboard(chatId)); return;
+  }
+  // Fail closed: no hardcoded fallback — if the secret is unset, nobody gets in.
+  if (env.ADMIN_PASSWORD && pass === env.ADMIN_PASSWORD) {
+    await setAdminSession(env, chatId);
+    await env.BIZLI_MEMORY.delete(`admin_att_${chatId}`);
+    await env.BIZLI_MEMORY.delete(`admin_lock_${chatId}`);
+    await sendTelegram(env, chatId, `🔓 Admin mode (15 min)\n\n🔐 Bizli Admin — ${BIZLI_VERSION}\n\nChoose a realm 👇`, { reply_markup: adminMainKeyboard() });
+  } else {
+    await adminFailedAttempt(env, chatId, "password");
+  }
+}
+
+// Recovery: the typed gmail must match the ADMIN's registered gmail. A match
+// only clears the lock — the password is still required to get in.
+export async function startAdminRecover(env: Env, chatId: string): Promise<void> {
+  if (await env.BIZLI_MEMORY.get(`admin_hardlock_${chatId}`)) {
+    await sendTelegram(env, chatId, "🔒 admin access is locked. contact !support."); return;
+  }
+  await env.BIZLI_MEMORY.put(`admin_recover_wait_${chatId}`, "1", { expirationTtl: 600 });
+  await sendTelegram(env, chatId, "enter the admin recovery gmail 👇 (or type \"cancel\")");
+}
+
+export async function clearAdminLocks(env: Env, chatId: string): Promise<void> {
+  await Promise.all([
+    env.BIZLI_MEMORY.delete(`admin_lock_${chatId}`),
+    env.BIZLI_MEMORY.delete(`admin_hardlock_${chatId}`),
+    env.BIZLI_MEMORY.delete(`admin_att_${chatId}`),
+    env.BIZLI_MEMORY.delete(`admin_pw_wait_${chatId}`),
+    env.BIZLI_MEMORY.delete(`admin_recover_wait_${chatId}`),
+  ]);
+}
+
+export async function handleAdmin(env: Env, chatId: string, text: string, messageId?: number): Promise<boolean> {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
 
-  if (lower.startsWith("!admin ")) {
-    const pass = trimmed.slice(7).trim();
-    const lockVal = await env.BIZLI_MEMORY.get(`admin_lock_${chatId}`);
-    if (lockVal && Date.now() < parseInt(lockVal)) { await sendTelegram(env, chatId, "locked 30 min."); return true; }
-    // Fail closed: no hardcoded fallback — if the secret is unset, nobody gets in.
-    if (env.ADMIN_PASSWORD && pass === env.ADMIN_PASSWORD) {
-      await setAdminSession(env, chatId);
-      await env.BIZLI_MEMORY.delete(`admin_att_${chatId}`);
-      await sendTelegram(env, chatId, `🔓 Admin mode (15 min)\n\n🔐 Bizli Admin — ${BIZLI_VERSION}\n\nChoose a realm 👇`, { reply_markup: adminMainKeyboard() });
-    } else {
-      const att = parseInt(await env.BIZLI_MEMORY.get(`admin_att_${chatId}`) || "0") + 1;
-      if (att >= 3) { await env.BIZLI_MEMORY.put(`admin_lock_${chatId}`, String(Date.now() + 1800000), { expirationTtl: 1900 }); await sendTelegram(env, chatId, "wrong password. 30 min lockout."); }
-      else { await env.BIZLI_MEMORY.put(`admin_att_${chatId}`, String(att), { expirationTtl: 600 }); await sendTelegram(env, chatId, `wrong. ${3 - att} left.`); }
+  // Pending waits (set by bare /admin and the Recover button) — a plain
+  // message is the password / recovery gmail. !/​/ messages drop the wait.
+  if (!trimmed.startsWith("!") && !trimmed.startsWith("/")) {
+    if (await env.BIZLI_MEMORY.get(`admin_recover_wait_${chatId}`)) {
+      if (/^(cancel|stop|exit|quit)$/i.test(lower)) {
+        await env.BIZLI_MEMORY.delete(`admin_recover_wait_${chatId}`);
+        await sendTelegram(env, chatId, "cancelled 👍"); return true;
+      }
+      const adminUser = (await db(env, `users?gmail_hash=eq.tg_${env.ADMIN_CHAT_ID}&limit=1`))?.[0];
+      if (adminUser?.gmail && lower === String(adminUser.gmail).toLowerCase().trim()) {
+        await env.BIZLI_MEMORY.delete(`admin_recover_wait_${chatId}`);
+        await env.BIZLI_MEMORY.delete(`admin_lock_${chatId}`);
+        await env.BIZLI_MEMORY.delete(`admin_att_${chatId}`);
+        await sendTelegram(env, chatId, "✅ verified — the lock is cleared. try your password again with /admin");
+        if (chatId !== env.ADMIN_CHAT_ID) {
+          await sendTelegram(env, env.ADMIN_CHAT_ID, `⚠️ Admin lock on chat ${chatId} was cleared via gmail recovery.`);
+        }
+      } else {
+        await adminFailedAttempt(env, chatId, "gmail");
+      }
+      return true;
     }
+    if (await env.BIZLI_MEMORY.get(`admin_pw_wait_${chatId}`)) {
+      await env.BIZLI_MEMORY.delete(`admin_pw_wait_${chatId}`);
+      if (/^(cancel|stop|exit|quit)$/i.test(lower)) { await sendTelegram(env, chatId, "cancelled 👍"); return true; }
+      await attemptAdminPassword(env, chatId, trimmed, messageId);
+      return true;
+    }
+  }
+
+  // Bare /admin (menu tap) → ask for the password conversationally
+  if (lower === "!admin") {
+    if (await env.BIZLI_MEMORY.get(`admin_hardlock_${chatId}`)) {
+      await sendTelegram(env, chatId, "🔒 admin access is locked. contact !support."); return true;
+    }
+    const lockVal = await env.BIZLI_MEMORY.get(`admin_lock_${chatId}`);
+    if (lockVal && Date.now() < parseInt(lockVal)) {
+      const hrs = Math.max(1, Math.ceil((parseInt(lockVal) - Date.now()) / 3600000));
+      await sendTelegram(env, chatId, `🔒 admin login is locked (~${hrs}h left).`, adminLockKeyboard(chatId)); return true;
+    }
+    await env.BIZLI_MEMORY.put(`admin_pw_wait_${chatId}`, "1", { expirationTtl: 300 });
+    await sendTelegram(env, chatId, "enter the admin password 👇 (or type \"cancel\")");
+    return true;
+  }
+
+  if (lower.startsWith("!admin ")) {
+    await attemptAdminPassword(env, chatId, trimmed.slice(7).trim(), messageId);
     return true;
   }
 

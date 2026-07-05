@@ -152,6 +152,58 @@ export async function editTelegramMessage(env: Env, chatId: string, messageId: n
   }).catch(() => {});
 }
 
+export async function deleteTelegramMessage(env: Env, chatId: string, messageId: number): Promise<void> {
+  await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+  }).catch(() => {});
+}
+
+// ChatGPT-style "text forming" — simulated streaming. The reply is already
+// complete (true token streaming would mean rewriting the callGroq loop);
+// we send the opening words instantly, then grow the message with a few
+// quick edits. Max 5 edits total, ~700ms apart — safe under Telegram's
+// per-chat edit limits. An optional keyboard ships ONLY with the final edit.
+export async function sendAnimatedText(env: Env, chatId: string, text: string, extra?: any): Promise<void> {
+  // Short casual replies land in one shot — animation is for longer answers.
+  if (text.length <= 120) { await sendTelegram(env, chatId, text, extra); return; }
+  try {
+    const totalSteps = Math.min(5, Math.max(2, Math.ceil(text.length / 220)));
+    const chunks: string[] = [];
+    for (let i = 1; i < totalSteps; i++) {
+      const target = Math.floor((text.length * i) / totalSteps);
+      const cut = text.lastIndexOf(" ", target);
+      chunks.push(text.slice(0, cut > 40 ? cut : target));
+    }
+    chunks.push(text); // final = the complete reply
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: chunks[0] + " ▍" }),
+    });
+    const data = await res.json().catch(() => null) as any;
+    const messageId = data?.result?.message_id;
+    if (!messageId) { await sendTelegram(env, chatId, text, extra); return; } // send failed → one-shot fallback
+    for (let i = 1; i < chunks.length; i++) {
+      await new Promise(r => setTimeout(r, 700));
+      const isLast = i === chunks.length - 1;
+      const edited = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/editMessageText`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId, message_id: messageId,
+          text: isLast ? text : chunks[i] + " ▍",
+          ...(isLast && extra ? extra : {}),
+        }),
+      }).then(r => r.ok).catch(() => false);
+      if (isLast && !edited) await sendTelegram(env, chatId, text, extra); // never leave a truncated reply
+    }
+  } catch {
+    await sendTelegram(env, chatId, text, extra).catch(() => {});
+  }
+}
+
 export async function sendTyping(env: Env, chatId: string): Promise<void> {
   await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
     method: "POST",
