@@ -101,6 +101,7 @@ const ADMIN_CARD: CardGroup[] = [
     { cmd: "!agent models", desc: "live model list", btn: "📡 Models", run: "agent:models" },
     { cmd: "!agent refresh models", desc: "probe all providers", btn: "🔄 Refresh Models", run: "agent:refresh models" },
     { cmd: "!agent errors", desc: "recent errors", btn: "🐛 Errors", run: "agent:errors" },
+    { cmd: "!agent addendum", desc: "learned rules (self-improve kit)", btn: "📜 Learned Rules", run: "agent:addendum" },
     { cmd: "!agent kv", desc: "storage breakdown", btn: "🗂️ KV Storage", run: "agent:kv" },
     { cmd: "!agent uptime", desc: "version + uptime", btn: "🕐 Uptime", run: "agent:uptime" },
     { cmd: "!agent report", desc: "daily health report", btn: "📋 Daily Report", run: "agent:report" },
@@ -520,6 +521,15 @@ export async function runAgentCommand(env: Env, chatId: string, agentCmd: string
     await env.BIZLI_MEMORY.delete(`auth_${cid}`);
     await env.BIZLI_MEMORY.delete(`admin_session_${cid}`);
     await out(`✅ session cleared for ${cid}`);
+  } else if (agentCmd === "addendum clear") {
+    // Self-improvement kit: wipe the admin-approved learned rules
+    await env.BIZLI_MEMORY.delete("rules_addendum");
+    await out("🧽 learned-rules addendum cleared — her brain runs on CRITICAL_RULES only now");
+  } else if (agentCmd === "addendum") {
+    const a = (await env.BIZLI_MEMORY.get("rules_addendum")) || "";
+    await out(a
+      ? `📜 LEARNED RULES (${a.length}/600 chars, live in every reply):\n\n${a}\n\n🧽 Clear: !agent addendum clear`
+      : "📜 learned-rules addendum is empty — approve ideas from the daily 💡 report to teach her new rules");
   } else if (agentCmd === "uptime") {
     const lastReport = await env.BIZLI_MEMORY.get("last_daily_report");
     await out(`🕐 Now: ${new Date().toUTCString()}\n📋 Last daily report: ${lastReport ? new Date(parseInt(lastReport)).toUTCString() : "never"}\n🤖 Version: ${BIZLI_VERSION}`);

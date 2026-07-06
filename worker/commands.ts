@@ -332,6 +332,47 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
   const action = data.slice(0, colonIdx);
   const payload = data.slice(colonIdx + 1);
 
+  if (action === "sik") {
+    // Self-improvement kit: ✅ Approve / ❌ Reject / 💬 Why on the daily idea
+    // report. Approve = idea's rule goes live in KV rules_addendum (600 cap).
+    const [op, idxs] = payload.split(":");
+    const raw = await env.BIZLI_MEMORY.get("improve_ideas");
+    const ideas: any[] = raw ? JSON.parse(raw) : [];
+    const idx = parseInt(idxs);
+    const idea = ideas[idx];
+    if (!idea) { await answerCallback(env, cbId, "idea expired"); return; }
+    if (op === "w") {
+      await answerCallback(env, cbId, "");
+      await sendTelegram(env, fromId, `💭 Idea ${idx + 1} — ${idea.title || ""}\n\nWhy: ${idea.reasoning || "(no reasoning given)"}\n\nProposed rule:\n"${idea.rule}"`);
+      return;
+    }
+    if (op === "r") {
+      idea.status = "rejected";
+      await env.BIZLI_MEMORY.put("improve_ideas", JSON.stringify(ideas), { expirationTtl: 604800 });
+      await answerCallback(env, cbId, "❌ rejected");
+      await sendTelegram(env, fromId, `❌ Rejected: ${idea.title || `idea ${idx + 1}`}`);
+      return;
+    }
+    if (op === "a") {
+      if (idea.status === "approved") { await answerCallback(env, cbId, "already live"); return; }
+      const cur = (await env.BIZLI_MEMORY.get("rules_addendum")) || "";
+      const next = (cur ? cur + "\n" : "") + `• ${String(idea.rule).trim()}`;
+      if (next.length > 600) {
+        await answerCallback(env, cbId, "⚠️ addendum full");
+        await sendTelegram(env, fromId, `⚠️ Rules addendum is full (${cur.length}/600 chars) — this rule won't fit. View/clear it with !agent addendum, then approve again.`);
+        return;
+      }
+      idea.status = "approved";
+      await env.BIZLI_MEMORY.put("rules_addendum", next);
+      await env.BIZLI_MEMORY.put("improve_ideas", JSON.stringify(ideas), { expirationTtl: 604800 });
+      await answerCallback(env, cbId, "✅ live");
+      await sendTelegram(env, fromId, `✅ Approved & LIVE in her brain now:\n"${idea.rule}"\n\nAddendum: ${next.length}/600 chars — view/clear with !agent addendum`);
+      return;
+    }
+    await answerCallback(env, cbId, "");
+    return;
+  }
+
   if (action === "agent") {
     if (!await isAdminSession(env, fromId)) { await answerCallback(env, cbId, "Admin session expired — type !admin <password>"); return; }
     await answerCallback(env, cbId, "⏳");

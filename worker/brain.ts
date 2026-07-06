@@ -51,6 +51,15 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.40.0 — SELF-IMPROVEMENT KIT: TEST_SUITE 5 → 12 probes (president search,
+// time verbatim, photo-not-unprompted, no-filler endings, hallucination bait,
+// creator probe, aap/tum — every July-2026 battery bug class, 6h cron);
+// runIdeaReport (tests.ts) daily — Lab/Gemini reads recent_errors + test
+// results, proposes 1-3 rules w/ confidence %, sent to admin w/ ✅/❌/💬
+// buttons (sik: callbacks, commands.ts); approved rules → KV rules_addendum
+// (600-char cap) injected via getLearnedRules() into ALL 4 brains' system
+// prompts; !agent addendum view/clear (admin.ts). Nothing changes her brain
+// without Abhya's tap.
 // v12.39.3 — stabilization trio: (1) search speed — tavilySearch gets a TOTAL
 // budget across keys (chat 5s, deep 9s; was 5 keys × 6s stacking to 20s+);
 // (2) model-health soft bench in groq_status.mh — a model failing hard 4× in
@@ -86,7 +95,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.39.3";
+export const BIZLI_VERSION = "v12.40.0";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -562,6 +571,16 @@ export async function recordLastBrain(env: Env, brain: string, keyIdx?: number):
   } catch {}
 }
 
+// Self-improvement kit: admin-approved one-line rules live in KV
+// `rules_addendum` (600-char cap, managed via sik: buttons + !agent addendum)
+// and ride after CRITICAL_RULES in every brain's system prompt.
+export async function getLearnedRules(env: Env): Promise<string> {
+  try {
+    const a = ((await env.BIZLI_MEMORY.get("rules_addendum")) || "").trim();
+    return a ? `\n\nLEARNED RULES (recently approved by Papa — follow like all rules above):\n${a}` : "";
+  } catch { return ""; }
+}
+
 export async function appendError(env: Env, detail: string): Promise<void> {
   try {
     const raw = await env.BIZLI_MEMORY.get("recent_errors");
@@ -696,7 +715,7 @@ export async function callCerebras(env: Env, messages: any[], systemExtra: strin
   const keys = getCerebrasKeys(env);
   if (!keys.length) return "";
   const models = await getActiveCerebrasModels(env);
-  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "") + NO_TOOLS_NOTE;
+  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (await getLearnedRules(env)) + (systemExtra ? "\n\n" + systemExtra : "") + NO_TOOLS_NOTE;
   for (const key of keys) {
     for (const model of models) {
       try {
@@ -726,7 +745,7 @@ export async function callOpenRouter(env: Env, messages: any[], systemExtra: str
   const keys = getOpenRouterKeys(env);
   if (!keys.length) return "";
   const models = await getActiveOpenRouterModels(env);
-  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "") + NO_TOOLS_NOTE;
+  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (await getLearnedRules(env)) + (systemExtra ? "\n\n" + systemExtra : "") + NO_TOOLS_NOTE;
   let orErrLogged = false; // log the FIRST failure per call for diagnosis, not a flood
   for (const key of keys) {
     for (const model of models) {
@@ -781,7 +800,7 @@ export async function callOpenRouter(env: Env, messages: any[], systemExtra: str
 
 export async function callCloudflareAI(env: Env, messages: any[], systemExtra: string): Promise<string> {
   if (!env.AI) { appendError(env, "CF AI: env.AI binding missing").catch(() => {}); return ""; }
-  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "") + NO_TOOLS_NOTE;
+  const system = env.BIZLI_PERSONA + CRITICAL_RULES + (await getLearnedRules(env)) + (systemExtra ? "\n\n" + systemExtra : "") + NO_TOOLS_NOTE;
   // Model list, newest first — CF retires model ids over time, so never depend on one.
   const cfModels = ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/meta/llama-3.1-8b-instruct"];
   for (const model of cfModels) {
@@ -891,6 +910,7 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
   let gifSent = false;
 
   const { text: liveTextModels, vision: liveVisionModel } = await getActiveGroqModels(env);
+  const learnedRules = await getLearnedRules(env);
 
   // 413 "Request too large" is SIZE-based, not key-based — once a model rejects
   // this request, every other key would reject it too. Skip it request-wide
@@ -919,7 +939,7 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
       if (quotaExceeded(status, `${i}_${slot}`)) continue;
 
       try {
-        const system = env.BIZLI_PERSONA + CRITICAL_RULES + (systemExtra ? "\n\n" + systemExtra : "");
+        const system = env.BIZLI_PERSONA + CRITICAL_RULES + learnedRules + (systemExtra ? "\n\n" + systemExtra : "");
         const body: any = {
           model: usedModel,
           messages: [{ role: "system", content: system }, ...messages],

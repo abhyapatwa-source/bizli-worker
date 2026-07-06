@@ -53,6 +53,24 @@
   "English" re-called get_weather instead of translating previous reply, and
   labeled today's hi/lo as "tomorrow" — minor. All → self-improvement kit's
   daily idea loop.
+- **v12.40.0 — SELF-IMPROVEMENT KIT SHIPPED (deployed, sanity-probed 3.0s)**:
+  - TEST_SUITE 5 → 12 probes (every July-2026 battery bug class: president
+    search, time verbatim, photo-not-unprompted, no-filler ending,
+    hallucination bait, creator probe, aap/tum respect) — 6h cron, Gemini
+    scored, Supabase test_results.
+  - runIdeaReport (tests.ts) — DAILY: Lab/Gemini reads recent_errors + failed
+    tests + pass rate → 1-3 ideas w/ confidence % → ADMIN_CHAT_ID message
+    with ✅ Approve / ❌ / 💬 Why per idea (sik:a/r/w callbacks, commands.ts,
+    ADMIN_CHAT_ID-guarded). Ideas KV improve_ideas (7d TTL). Stays quiet if
+    nothing worth fixing. FIRST REPORT: fires on the next hourly cron tick.
+  - Approve → rule appended to KV rules_addendum (HARD CAP 600 chars, refuses
+    + tells admin when full) → getLearnedRules() injects it into ALL 4 brains'
+    system prompts as "LEARNED RULES (approved by Papa)". Reject/expire safe.
+  - !agent addendum (view) / !agent addendum clear + 📜 card button (admin.ts).
+  - NOTE for Abhya: expect the first 💡 report on Telegram within the hour
+    (cron 0 * * * *); the 12-test battery also runs on the next 6h gate.
+- NEXT: games (v12.41.0) → DP tool (v12.41.x) → Abhya live pass → maintenance
+  OFF decision. Monitoring Lab dashboard AFTER stability (Abhya's order).
 
 ## Earlier same day (v12.39.0 planning notes)
 

@@ -3,7 +3,7 @@ import { db } from './db';
 import { getGroqKeys, getUserLocalHour, MORNING_MSGS, NIGHT_MSGS } from './utils';
 import { sendTelegram } from './telegram';
 import { getGroqStatus, probeAllProviders } from './brain';
-import { runBizliTests } from './tests';
+import { runBizliTests, runIdeaReport } from './tests';
 
 function pickProactiveMessage(name: string, localHour: number): string {
   const first = name.split(" ")[0];
@@ -191,6 +191,14 @@ export async function runAgents(env: Env): Promise<void> {
         `📊 Daily Report\n\n✅ Users: ${users2?.[0]?.count || 0}\n💬 Messages: ${msgs?.[0]?.count || 0}\n🧠 Memories: ${mems?.[0]?.count || 0}\n⏰ ${new Date().toUTCString()}`
       );
       await env.BIZLI_MEMORY.put("last_daily_report", String(now), { expirationTtl: 90000 });
+    }
+
+    // Self-improvement kit: daily idea report (Lab reads errors + test results,
+    // proposes rules with confidence %; admin approves via sik: buttons)
+    const lastIdeas = await env.BIZLI_MEMORY.get("last_idea_report");
+    if (!lastIdeas || now - parseInt(lastIdeas) > 86400000) {
+      await env.BIZLI_MEMORY.put("last_idea_report", String(now), { expirationTtl: 90000 });
+      await runIdeaReport(env).catch(() => {});
     }
   } catch (e) {
     console.error("[Agent]", e);
