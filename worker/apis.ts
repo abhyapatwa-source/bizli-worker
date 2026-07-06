@@ -16,31 +16,40 @@ function wmoEmoji(code: number): string {
 }
 
 export async function getWeather(location: string): Promise<string> {
-  // Primary: wttr.in (one call, nice format)
+  // Primary: open-meteo (free, no key, structured — more accurate than wttr.in's
+  // one-liner) — geocode, then rich current conditions + today's hi/lo
   try {
-    // &m forces metric (°C) — wttr.in otherwise guesses units from the datacenter's IP (°F)
+    const geoRes = await fetchTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`, {}, 5000);
+    if (geoRes?.ok) {
+      const geo = await geoRes.json() as any;
+      const place = geo?.results?.[0];
+      if (place?.latitude) {
+        const wxRes = await fetchTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto`, {}, 5000);
+        if (wxRes?.ok) {
+          const wx = await wxRes.json() as any;
+          const c = wx?.current;
+          if (c?.temperature_2m !== undefined) {
+            const name = [place.name, place.country_code].filter(Boolean).join(", ");
+            const hum = c.relative_humidity_2m !== undefined ? `, humidity ${Math.round(c.relative_humidity_2m)}%` : "";
+            const d = wx?.daily;
+            const hiLo = d?.temperature_2m_max?.[0] !== undefined && d?.temperature_2m_min?.[0] !== undefined
+              ? ` | today ${Math.round(d.temperature_2m_min[0])}°–${Math.round(d.temperature_2m_max[0])}°C` : "";
+            return `${name}: ${wmoEmoji(c.weather_code ?? 0)} ${Math.round(c.temperature_2m)}°C (feels ${Math.round(c.apparent_temperature ?? c.temperature_2m)}°C)${hum}, wind ${Math.round(c.wind_speed_10m ?? 0)} km/h${hiLo}`;
+          }
+        }
+      }
+    }
+  } catch {}
+  // Fallback: wttr.in one-liner (&m forces °C — wttr otherwise guesses units
+  // from the datacenter's IP; error pages sometimes come back with status 200)
+  try {
     const res = await fetchTimeout(`https://wttr.in/${encodeURIComponent(location)}?format=3&m`, {}, 6000);
     if (res?.ok) {
       const text = (await res.text()).trim();
-      // wttr.in sometimes returns error pages with 200 — only accept plausible output
       if (text && text.length < 120 && !/unknown location|sorry|error/i.test(text)) return text;
     }
   } catch {}
-  // Fallback: open-meteo (free, no key) — geocode then current conditions
-  try {
-    const geoRes = await fetchTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`, {}, 5000);
-    if (!geoRes?.ok) return "";
-    const geo = await geoRes.json() as any;
-    const place = geo?.results?.[0];
-    if (!place?.latitude) return "";
-    const wxRes = await fetchTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m`, {}, 5000);
-    if (!wxRes?.ok) return "";
-    const wx = await wxRes.json() as any;
-    const c = wx?.current;
-    if (c?.temperature_2m === undefined) return "";
-    const name = [place.name, place.country_code].filter(Boolean).join(", ");
-    return `${name}: ${wmoEmoji(c.weather_code ?? 0)} ${Math.round(c.temperature_2m)}°C (feels ${Math.round(c.apparent_temperature ?? c.temperature_2m)}°C), wind ${Math.round(c.wind_speed_10m ?? 0)} km/h`;
-  } catch { return ""; }
+  return "";
 }
 
 // Yahoo needs the ^ prefix for indices — models often pass the bare name.
@@ -69,7 +78,7 @@ export async function getStockPrice(symbol: string): Promise<string> {
     const arrow = parseFloat(change) >= 0 ? "📈" : "📉";
     const name = meta.shortName || meta.longName || s;
     const currency = meta.currency || "USD";
-    return `${arrow} ${name} (${meta.symbol})\n💰 ${currency} ${price}\n${arrow} ${parseFloat(change) >= 0 ? "+" : ""}${change} (${parseFloat(change) >= 0 ? "+" : ""}${pct}%) today`;
+    return `${arrow} ${name} (${meta.symbol})\n💰 ${currency} ${price}\n${arrow} ${parseFloat(change) >= 0 ? "+" : ""}${change} (${parseFloat(change) >= 0 ? "+" : ""}${pct}%) today\n🔗 finance.yahoo.com/quote/${encodeURIComponent(meta.symbol)}`;
   } catch { return ""; }
 }
 
@@ -86,7 +95,7 @@ export async function getCurrency(from: string, to: string, amount: number): Pro
       const data = await res.json() as any;
       const rate = data.rates?.[to];
       if (!rate) continue;
-      return `${amount} ${from} = ${(amount * rate).toFixed(2)} ${to}`;
+      return `${amount} ${from} = ${(amount * rate).toFixed(2)} ${to} (1 ${from} = ${rate.toFixed(4)} ${to})`;
     } catch { continue; }
   }
   return "";
@@ -115,7 +124,7 @@ export async function getCrypto(coin: string): Promise<string> {
       if (p?.usd) {
         const change = p.usd_24h_change?.toFixed(2);
         const arrow = parseFloat(change) >= 0 ? "📈" : "📉";
-        return `${coin.toUpperCase()}: $${p.usd?.toLocaleString()} / ₹${p.inr?.toLocaleString()} ${arrow} ${change}% (24h)`;
+        return `${coin.toUpperCase()}: $${p.usd?.toLocaleString()} / ₹${p.inr?.toLocaleString()} ${arrow} ${change}% (24h)\n🔗 google.com/search?q=${encodeURIComponent(coin)}+price`;
       }
     }
   } catch {}

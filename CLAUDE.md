@@ -414,7 +414,10 @@ Verify:
 
 ## IDEAS BACKLOG (Abhya's notes — discuss at the right phase)
 
-[Empty — add ideas here as user mentions them]
+- **Monitoring Lab** (2026-07-06): a dashboard home for self-tests + minor-bug
+  tracking — test battery pass rates, self-improvement idea history, rules
+  addendum contents, error trends. Phase: dashboard works after stabilization.
+  The self-improvement kit (below) ships FIRST; Monitoring Lab is its UI later.
 
 ---
 

@@ -1,6 +1,50 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-06 (v12.38.0 — SEARCH ACCURACY + MENU + LOCKOUT + REAL PHOTO)
+## Last session: 2026-07-06 evening (v12.39.0 — TIME AWARENESS + WEATHER CARD + PHOTO POLICY)
+
+### What shipped (v12.39.0, tsc-clean)
+- **Two-way TIME awareness** (transcript bug: she said "1:58 AM" when the TODAY
+  header said 1:54): TIME-verbatim rule (copy header digits exactly or call
+  get_current_time); she also corrects the USER — "good morning" at 7 PM their
+  time gets a playful correction; stale user claims (old prices, ex-office-
+  holders) corrected — own knowledge for stable facts, search only when
+  time-sensitive or genuinely unsure ("smart means RIGHT, not searching
+  everything" — Abhya's requirement).
+- **NO ROLEPLAY ACTIONS rule**: asterisk stage directions (*looks at the
+  time*) banned.
+- **Photo strictly only-when-asked**: unprompted-share clause deleted from
+  brain.ts rule + send_my_photo tool description (Abhya's call).
+- **Weather upgrade**: open-meteo now PRIMARY (adds humidity + today hi/lo),
+  wttr.in demoted to fallback; get_weather replies ride a wttr.in PNG weather
+  card via the existing movie-poster RICH_SENT path (imageSource "weather" in
+  brain.ts) + google weather search link in the tool result.
+- **Tools audit quick wins**: stock → finance.yahoo.com/quote link; crypto →
+  price search link; currency → exact rate shown (1 X = n Y).
+- **OpenRouter diagnosis**: forced probe = empty reply in 1.2s. Silent because
+  callOpenRouter never logged 429 bodies — NOW LOGGED (the 429 body names the
+  exact limit). Only 1 OR key configured (_2.._5 slots empty); Abhya decided
+  1 key + free-model rotation is enough for mini-works (avatar descriptions
+  etc.). After deploy, read the logged 429 message to confirm root cause.
+- **Prompt diet**: FORMALITY rule compressed.
+
+### Approved plan (C:\Users\bizli\.claude\plans\ok-but-also-zesty-babbage.md)
+1. ✅ v12.39.0 (this deploy) → 2. NEXT: **Monitoring Lab dashboard work**
+(Abhya reprioritized: overview box cards + sections/subsections, real-time
+fetching) → 3. v12.40.0 self-improvement kit (6h battery tests + daily idea
+report w/ confidence % to admin TG + ✅/❌/💬 buttons + KV rules_addendum
+capped 600 chars) → 4. v12.41.0 games (6 chat games: 20Q she-guesses, Word
+Chain, Trivia, Emoji Movie Guess, Riddles, Would You Rather; !games + /games
+menu; GAMES brain block; games category in autoExtractMemory) → 5. v12.41.x
+profile-photo tool #14 (look_at_profile_photo me|user; getUserProfilePhotos;
+cache keyed by file_unique_id so a changed DP is ALWAYS re-seen — no stale
+7-day cache; OpenRouter free vision first, Groq scout fallback).
+
+### Standing state
+- Maintenance: ON. GitHub diverged (local = truth, commit local-only, no
+  force-push). TEMP /admin/test-chat still deployed. Menu = 8 commands
+  (/games will make 9 — re-run /admin/set-menu after the games deploy).
+
+## Previous session: 2026-07-06 (v12.38.0 — SEARCH ACCURACY + MENU + LOCKOUT + REAL PHOTO)
 
 ### Current production state
 - Version: **v12.38.5 DEPLOYED + BATTERY-TESTED** (5 probe batteries run via

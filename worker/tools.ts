@@ -87,7 +87,7 @@ export const BIZLI_TOOLS = [
     type: "function",
     function: {
       name: "send_my_photo",
-      description: "Send YOUR real-life photo — the actual cat you're named after, how you looked in real life. Use it when someone asks what you look like / to see your photo / your real self, or very rarely when a moment genuinely calls for it. Never send it twice in a conversation, never as decoration.",
+      description: "Send YOUR real-life photo — the actual cat you're named after, how you looked in real life. Use it ONLY when the user asks what you look like / to see your photo / your real self. Never unprompted, never twice in a conversation, never as decoration.",
       parameters: {
         type: "object",
         properties: { caption: { type: "string", description: "Short warm caption in YOUR voice, in the user's language" } },
@@ -183,7 +183,9 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
     switch (toolName) {
       case "get_weather": {
         const w = await getWeather(args.location);
-        return w || `Weather data not available for ${args.location}`;
+        if (!w) return `Weather data not available for ${args.location}`;
+        const wq = String(args.location || "").trim().replace(/\s+/g, "+");
+        return `${w}\n🔗 google.com/search?q=weather+${wq}`;
       }
       case "get_current_time": {
         const loc = (args.location || "").trim();
