@@ -51,6 +51,10 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.39.1 — 413 storm fix: "Request too large" is size-based, so one 413 now
+// skips that model for ALL keys in the request (was burning ~1s × 16 keys per
+// message on gpt-oss-120b once the prompt neared its 8k budget); error snippets
+// lengthened to 220 chars so the Limit/Requested numbers get captured.
 // v12.39.0 — transcript fixes + weather upgrade: TIME-verbatim rule (she said
 // 1:58 when the TODAY header said 1:54) + no-asterisk-roleplay + time-aware
 // greetings; real photo strictly only-when-asked (unprompted clause removed);
@@ -70,7 +74,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.39.0";
+export const BIZLI_VERSION = "v12.39.1";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -860,6 +864,12 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
 
   const { text: liveTextModels, vision: liveVisionModel } = await getActiveGroqModels(env);
 
+  // 413 "Request too large" is SIZE-based, not key-based — once a model rejects
+  // this request, every other key would reject it too. Skip it request-wide
+  // instead of burning ~1s × 16 keys on guaranteed failures (seen in prod:
+  // gpt-oss-120b 413-storming all keys once the prompt neared its 8k budget).
+  const tooLargeModels = new Set<string>();
+
   outerLoop: for (const i of order) {
     if ((status.cooldowns[i] || 0) - Date.now() > 60_000) continue;
 
@@ -869,6 +879,7 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
 
     for (const { id: usedModel, slot } of modelsToTry) {
       if (!hasVisionContent && (status.mc[`${i}_${slot}`] || 0) > Date.now()) continue;
+      if (tooLargeModels.has(usedModel)) continue;
       // Proactive quota skip: treat near-limit combos as cooling so rotation
       // flows to the next key/model silently — users never see a 429.
       if (quotaExceeded(status, `${i}_${slot}`)) continue;
@@ -907,9 +918,10 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
           continue;
         }
         if (!res.ok) {
-          const errSnippet = await res.text().catch(() => "").then(t => t.slice(0, 120));
+          const errSnippet = await res.text().catch(() => "").then(t => t.slice(0, 220));
           console.error(`[Groq key ${i} slot ${slot}] HTTP ${res.status}: ${errSnippet}`);
           appendError(env, `Groq key ${i}/${slot} HTTP ${res.status}: ${errSnippet}`).catch(() => {});
+          if (res.status === 413) { tooLargeModels.add(usedModel); continue; }
           if (!hasVisionContent && (res.status === 404 || (res.status === 400 && errSnippet.toLowerCase().includes("model not found")))) {
             status.mc[`${i}_${slot}`] = Date.now() + 86_400_000;
             statusDirty = true;
