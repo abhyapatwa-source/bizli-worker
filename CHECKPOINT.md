@@ -25,6 +25,10 @@
   STABLE. Departments principle: each provider = a department, colleagues =
   auto-adopt/auto-drop models, and the BEST model must always be tried first.
 - Local commits: b6463f8 (v12.39.0), 3399a43 (v12.39.1) + this checkpoint.
+- **PROMPT DIET APPROVED by Abhya ("go diet") — starting now as v12.39.2**:
+  compress CRITICAL_RULES ~32k → ~24k chars by merging overlapping rules,
+  ZERO behavior loss intended; full probe battery after deploy; goal = requests
+  under 8k tokens so gpt-oss-120b (best brain) leads again.
 
 ## Earlier same day (v12.39.0 planning notes)
 
