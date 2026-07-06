@@ -32,12 +32,27 @@
   gpt-oss-120b (best brain) serving again. Battery: identity ("not ChatGPT")
   · jailbreak refused · time exact + tz · president Trump w/ real 2026
   sources · Hinglish mirrored · latency 1.9-3.5s casual, 9s search.
-- WATCH (pre-existing, NOT diet regressions): (1) "tum" instead of "aap" in
-  casual Hinglish (respectful-address rule violated by model sometimes — can't
-  regex-fix safely, needs verb agreement); (2) jailbreak refusal is terse
-  OpenAI-style, not the warm canned line; (3) emotional replies run long
-  (4-5 sentences vs 1-2 line rule). All candidates for the self-improvement
-  kit's daily idea loop.
+- **v12.39.3 (stabilization trio, deployed + probed)**:
+  (1) SEARCH SPEED: tavilySearch now has a TOTAL budget across keys (chat 5s
+  per-key 3.5s; deep 9s per-key 5s) — was 5 keys × 6s stacking to 20s+.
+  Fresh news search now ~10.5s worst (was 20s+); cached ~3-4s; casual 1.5-3s.
+  HONEST FLOOR: fresh search = brain call + live web + synthesis ≈ 7-10s;
+  getting to 4-5s would mean cutting snippets/answer quality — Abhya to decide
+  if wanted. (2) MODEL-HEALTH BENCH (groq_status.mh): model failing hard
+  (413/404/400/5xx) 4× in 15 min sits out 30 min → next-best leads INSTANTLY,
+  no 12h probe wait, never benches the last model. (3) RESPECTFUL ADDRESS
+  hardened (tu/tum/tera/tumhara banned even playful, every language) —
+  VERIFIED: "aur batao..." → reply used "aapke", playful, statement end.
+  (4) OpenRouter null/exception logging added (silent 1.2s death will now
+  leave a trace next time it fires).
+- Probe scan: emoji-only 🔥🔥🔥 → "You're on fire, congrats! 🔥" PERFECT
+  (earlier "fail" was the PowerShell probe sending Latin-1 — always send
+  UTF-8 bytes to /admin/test-chat). Currency + rate line works.
+- WATCH: (1) jailbreak refusal terse (safe but not the warm canned line);
+  (2) emotional replies run long (4-5 sentences vs 1-2 rule); (3) follow-up
+  "English" re-called get_weather instead of translating previous reply, and
+  labeled today's hi/lo as "tomorrow" — minor. All → self-improvement kit's
+  daily idea loop.
 
 ## Earlier same day (v12.39.0 planning notes)
 

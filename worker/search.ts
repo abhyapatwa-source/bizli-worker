@@ -82,7 +82,7 @@ export function getTavilyKeys(env: Env): string[] {
     env.TAVILY_API_KEY_4, env.TAVILY_API_KEY_5].filter(Boolean) as string[];
 }
 
-export async function tavilySearch(env: Env, body: any, timeoutMs = 8000): Promise<any | null> {
+export async function tavilySearch(env: Env, body: any, timeoutMs = 8000, totalBudgetMs?: number): Promise<any | null> {
   const keys = getTavilyKeys(env);
   if (!keys.length) return null;
   let ptr = 0;
@@ -90,7 +90,12 @@ export async function tavilySearch(env: Env, body: any, timeoutMs = 8000): Promi
     const p = await env.BIZLI_MEMORY.get("tavily_ptr");
     ptr = p ? parseInt(p) : 0;
   } catch {}
+  // TOTAL budget across ALL keys — without it, 5 slow keys × 6s stacked into
+  // 20s+ replies (the "worst-case news ~20s" from the v12.38.5 battery).
+  const deadline = Date.now() + (totalBudgetMs ?? timeoutMs * keys.length);
   for (let i = 0; i < keys.length; i++) {
+    const remaining = deadline - Date.now();
+    if (remaining < 800) break; // budget spent — fall through to Serper fast
     const idx = (ptr + i) % keys.length;
     try {
       // Per-key time cap — a slow Tavily key must not stall the whole reply
@@ -98,7 +103,7 @@ export async function tavilySearch(env: Env, body: any, timeoutMs = 8000): Promi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, api_key: keys[idx] }),
-      }, timeoutMs);
+      }, Math.min(timeoutMs, remaining));
       if (!res) continue;
       if (res.status === 401 || res.status === 429 || res.status === 432) continue;
       if (!res.ok) continue;
@@ -153,7 +158,7 @@ export async function readUrl(url: string): Promise<string> {
 
 // ————— the search pipeline —————
 
-interface SearchOpts { depth: "basic" | "advanced"; maxResults: number; news: boolean; maxSnippets: number; perSnippet: number; timeoutMs: number }
+interface SearchOpts { depth: "basic" | "advanced"; maxResults: number; news: boolean; maxSnippets: number; perSnippet: number; timeoutMs: number; budgetMs?: number }
 
 async function runSearch(env: Env, query: string, opts: SearchOpts): Promise<string> {
   // News headlines fetched in parallel (never sequential — latency matters)
@@ -166,7 +171,7 @@ async function runSearch(env: Env, query: string, opts: SearchOpts): Promise<str
     search_depth: opts.depth,
     include_answer: true,
     ...(opts.news ? { topic: "news" } : {}),
-  }, opts.timeoutMs);
+  }, opts.timeoutMs, opts.budgetMs);
   if (tv) {
     answer = tv.answer || "";
     results = (Array.isArray(tv.results) ? tv.results : []).map((r: any) => ({
@@ -198,7 +203,7 @@ export async function searchWeb(env: Env, query: string, topic?: string): Promis
   const cached = await env.BIZLI_MEMORY.get(cacheKey);
   if (cached) return cached;
   const result = await runSearch(env, query, {
-    depth: "basic", maxResults: 5, news, maxSnippets: 4, perSnippet: 280, timeoutMs: 6000,
+    depth: "basic", maxResults: 5, news, maxSnippets: 4, perSnippet: 280, timeoutMs: 3500, budgetMs: 5000,
   });
   if (result) {
     await env.BIZLI_MEMORY.put(cacheKey, result, { expirationTtl: news ? 600 : 3600 }).catch(() => {});
@@ -214,7 +219,7 @@ export async function searchWebDeep(env: Env, query: string): Promise<string> {
   const cached = await env.BIZLI_MEMORY.get(cacheKey);
   if (cached) return cached;
   const result = await runSearch(env, query, {
-    depth: "advanced", maxResults: 8, news: true, maxSnippets: 8, perSnippet: 450, timeoutMs: 8000,
+    depth: "advanced", maxResults: 8, news: true, maxSnippets: 8, perSnippet: 450, timeoutMs: 5000, budgetMs: 9000,
   });
   if (result) {
     await env.BIZLI_MEMORY.put(cacheKey, result, { expirationTtl: 900 }).catch(() => {});

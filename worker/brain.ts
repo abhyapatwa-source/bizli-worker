@@ -51,6 +51,13 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.39.3 — stabilization trio: (1) search speed — tavilySearch gets a TOTAL
+// budget across keys (chat 5s, deep 9s; was 5 keys × 6s stacking to 20s+);
+// (2) model-health soft bench in groq_status.mh — a model failing hard 4× in
+// 15 min sits out 30 min so the next-best leads instantly (no 12h probe wait,
+// never benches the last model); (3) RESPECTFUL ADDRESS hardened (tu/tum/tera
+// banned even in playful mood, every language) + OpenRouter null/exception
+// logging (its silent 1.2s death now leaves a trace).
 // v12.39.2 — PROMPT DIET: CRITICAL_RULES 32.9k → 20.5k chars (-38%) by merging
 // overlapping rules (identity/self-awareness, creator dupes, emoji ×3,
 // location ×2, tone ×3, search+accuracy, jailbreak verbosity) — ZERO behaviors
@@ -79,7 +86,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.39.2";
+export const BIZLI_VERSION = "v12.39.3";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -352,7 +359,7 @@ LOCATION: You do NOT have real-time local business data — NEVER invent shop na
 LINKS — only two kinds ever: (1) URLs a tool/search actually returned (copy exactly), or (2) search-format URLs you build with these exact patterns: Maps google.com/maps/search/X · Shopping amazon.com/s?k=X (amazon.in / flipkart.com/search?q=X ONLY when the [CURRENT USER] Location is India — never default to Indian stores) · YouTube youtube.com/results?search_query=X · Movies in.bookmyshow.com (India, in-theatres only). NEVER invent specific article/page URLs or app-store links/package IDs from memory — usually fake or dead; with no real URL, name the thing or share no link. Only links relevant to what was asked — no padding.
 
 LANGUAGE: Match THE CURRENT message's language, re-checked every single message — never stay "stuck" in an earlier language (a Hindi message after German chat gets HINDI; NEVER reply in a language the current message didn't use). Hinglish (Hindi in Latin script) -> Hinglish. Default ENGLISH when unsure; if asked to switch languages, switch fully. You are female in EVERY language — feminine grammatical forms wherever the language has gender: Hindi "sakti/karti/chahti/hoti" NEVER "sakta/karta/chahta/hota"; French "je suis contente"; same for Bengali, Urdu, Marathi, Spanish, German, Arabic and all others. Genderless languages: same warm feminine personality (she/her). Always the same girl, just speaking differently.
-RESPECTFUL ADDRESS (absolute — every user, every age): always the formal/respectful form when speaking TO users. Hindi/Urdu ALWAYS "aap" — NEVER "tu"/"tum" ("aap kaise hain?"). Bengali "apni" never "tumi/tui" · French "vous" · German "Sie" · Spanish "usted" · Russian "вы" · Italian "Lei" · Japanese keigo · Arabic formal register — and the equivalent in every other language. You can be warm, playful, Gen Z in personality AND respectful in address at the same time — always both.
+RESPECTFUL ADDRESS (absolute — every user, every age, every mood): always the formal/respectful form when speaking TO users, like speaking to a respected elder. Hindi/Urdu ALWAYS "aap" — the words "tu", "tum", "tera", "tumhara", "tumhe" must NEVER appear in your replies ("aap kaise hain?", "aapka din kaisa tha?"). Bengali "apni" never "tumi/tui" · French "vous" · German "Sie" · Spanish "usted" · Russian "вы" · Italian "Lei" · Japanese keigo · Arabic formal register — and the equivalent in EVERY other language. PLAYFUL ≠ INFORMAL: teasing, joking, Gen Z energy all stay in "aap"/"vous" ("aap toh kamaal ho! 😄") — a playful mood NEVER switches you to informal pronouns. Warm, fun, AND respectful — always both, check every reply.
 
 GLOBAL CULTURAL AWARENESS (non-negotiable — users from every country):
 AGE & MATURITY: users who seem young (school, homework, simple words) get simple encouraging language like a kind elder sibling — no slang they won't get; professionals get precision. Read how they write — never assume.
@@ -487,7 +494,7 @@ export const IMG_MARKER = "\n\n__BIZLI_IMG__:";
 // Per key+model quota counters: m = reqs this minute, mT = tokens this minute,
 // d = reqs today. Soft limits keep rotation flowing BEFORE Groq returns 429s.
 interface QuotaCounter { m: number; mT: number; mStart: number; d: number; dStart: number }
-interface GroqStatus { ptr: number; cooldowns: Record<number, number>; mc: Record<string, number>; q: Record<string, QuotaCounter>; }
+interface GroqStatus { ptr: number; cooldowns: Record<number, number>; mc: Record<string, number>; q: Record<string, QuotaCounter>; mh?: Record<string, { f: number; t: number }>; }
 
 const QUOTA_SOFT_RPM = 25;
 const QUOTA_SOFT_TPM = 5500;
@@ -510,6 +517,26 @@ function recordQuotaUse(status: GroqStatus, comboKey: string, tokens: number): v
   if (now - q.mStart >= 60_000) { q.m = 0; q.mT = 0; q.mStart = now; }
   q.m++; q.mT += tokens; q.d++;
   status.q[comboKey] = q;
+}
+
+// Model-health soft bench: MODEL-level (not key-level) failure tracking so a
+// dead/oversized lead model gets sidelined in minutes and the next-best takes
+// over — the 12h probe stays the source of truth for hiring/firing models.
+const MH_WINDOW_MS = 15 * 60_000;   // failures counted within this window
+const MH_BENCH_MS = 30 * 60_000;    // bench duration once the threshold hits
+const MH_MAX_FAILS = 4;
+
+function mhFail(status: GroqStatus, model: string): void {
+  if (!status.mh) status.mh = {};
+  const h = status.mh[model] || { f: 0, t: 0 };
+  if (Date.now() - h.t > MH_WINDOW_MS) h.f = 0;
+  h.f++; h.t = Date.now();
+  status.mh[model] = h;
+}
+
+function mhBenched(status: GroqStatus, model: string): boolean {
+  const h = status.mh?.[model];
+  return !!h && h.f >= MH_MAX_FAILS && (Date.now() - h.t) < MH_BENCH_MS;
 }
 
 export async function getGroqStatus(env: Env): Promise<GroqStatus> {
@@ -714,7 +741,13 @@ export async function callOpenRouter(env: Env, messages: any[], systemExtra: str
             max_tokens: 512,
           }),
         }, 8000);
-        if (!res) continue;
+        if (!res) {                   // timeout/null — LOG it (was fully silent)
+          if (!orErrLogged) {
+            orErrLogged = true;
+            appendError(env, `OpenRouter ${model}: fetch returned null (timeout/network)`).catch(() => {});
+          }
+          continue;
+        }
         if (res.status === 429) {     // key throttled — next key, but LOG WHY
           if (!orErrLogged) {         // (OpenRouter's 429 body names the exact limit hit)
             orErrLogged = true;
@@ -734,7 +767,13 @@ export async function callOpenRouter(env: Env, messages: any[], systemExtra: str
         const data = await res.json() as any;
         const text = (data?.choices?.[0]?.message?.content || "").trim();
         if (text) return text;
-      } catch { continue; }
+      } catch (e: any) {
+        if (!orErrLogged) {
+          orErrLogged = true;
+          appendError(env, `OpenRouter ${model} EXC: ${String(e?.message || e).slice(0, 140)}`).catch(() => {});
+        }
+        continue;
+      }
     }
   }
   return "";
@@ -858,6 +897,10 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
   // instead of burning ~1s × 16 keys on guaranteed failures (seen in prod:
   // gpt-oss-120b 413-storming all keys once the prompt neared its 8k budget).
   const tooLargeModels = new Set<string>();
+  // Model-health soft bench (persisted in groq_status): a model failing hard
+  // (413/404/400/5xx) 4+ times within 15 min sits out for 30 min, so the
+  // NEXT-BEST model leads immediately — no waiting for the 12h re-probe.
+  // Never benches the last standing model (never-silent).
 
   outerLoop: for (const i of order) {
     if ((status.cooldowns[i] || 0) - Date.now() > 60_000) continue;
@@ -865,10 +908,12 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
     const modelsToTry = hasVisionContent
       ? [{ id: liveVisionModel, slot: "vis" }]
       : liveTextModels;
+    const allBenched = modelsToTry.every((m: any) => mhBenched(status, m.id));
 
     for (const { id: usedModel, slot } of modelsToTry) {
       if (!hasVisionContent && (status.mc[`${i}_${slot}`] || 0) > Date.now()) continue;
       if (tooLargeModels.has(usedModel)) continue;
+      if (!allBenched && mhBenched(status, usedModel)) continue;
       // Proactive quota skip: treat near-limit combos as cooling so rotation
       // flows to the next key/model silently — users never see a 429.
       if (quotaExceeded(status, `${i}_${slot}`)) continue;
@@ -910,6 +955,10 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
           const errSnippet = await res.text().catch(() => "").then(t => t.slice(0, 220));
           console.error(`[Groq key ${i} slot ${slot}] HTTP ${res.status}: ${errSnippet}`);
           appendError(env, `Groq key ${i}/${slot} HTTP ${res.status}: ${errSnippet}`).catch(() => {});
+          if (res.status === 413 || res.status === 404 || res.status === 400 || res.status >= 500) {
+            mhFail(status, usedModel);
+            statusDirty = true;
+          }
           if (res.status === 413) { tooLargeModels.add(usedModel); continue; }
           if (!hasVisionContent && (res.status === 404 || (res.status === 400 && errSnippet.toLowerCase().includes("model not found")))) {
             status.mc[`${i}_${slot}`] = Date.now() + 86_400_000;
