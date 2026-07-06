@@ -25,10 +25,19 @@
   STABLE. Departments principle: each provider = a department, colleagues =
   auto-adopt/auto-drop models, and the BEST model must always be tried first.
 - Local commits: b6463f8 (v12.39.0), 3399a43 (v12.39.1) + this checkpoint.
-- **PROMPT DIET APPROVED by Abhya ("go diet") — starting now as v12.39.2**:
-  compress CRITICAL_RULES ~32k → ~24k chars by merging overlapping rules,
-  ZERO behavior loss intended; full probe battery after deploy; goal = requests
-  under 8k tokens so gpt-oss-120b (best brain) leads again.
+- **PROMPT DIET SHIPPED (v12.39.2, deployed + battery-verified)**: CRITICAL_RULES
+  32.9k → 20,505 chars (-38%, beat the 24k target) — merged overlapping rules,
+  every DO/DON'T + canned reply kept. Requests ~9.2k → ~6.1k tokens.
+  RESULT: ZERO 413s post-deploy, every probe answered on FIRST key attempt —
+  gpt-oss-120b (best brain) serving again. Battery: identity ("not ChatGPT")
+  · jailbreak refused · time exact + tz · president Trump w/ real 2026
+  sources · Hinglish mirrored · latency 1.9-3.5s casual, 9s search.
+- WATCH (pre-existing, NOT diet regressions): (1) "tum" instead of "aap" in
+  casual Hinglish (respectful-address rule violated by model sometimes — can't
+  regex-fix safely, needs verb agreement); (2) jailbreak refusal is terse
+  OpenAI-style, not the warm canned line; (3) emotional replies run long
+  (4-5 sentences vs 1-2 line rule). All candidates for the self-improvement
+  kit's daily idea loop.
 
 ## Earlier same day (v12.39.0 planning notes)
 
