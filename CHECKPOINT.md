@@ -1,6 +1,32 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-06 evening (v12.39.0 — TIME AWARENESS + WEATHER CARD + PHOTO POLICY)
+## Last session: 2026-07-06 evening (v12.39.0/.1 — TIME AWARENESS + WEATHER CARD + 413 STORM FIX)
+
+### DEPLOYED + PROBE-VERIFIED (v12.39.1 live)
+- Time verbatim ("It's 09:58 AM" = exact header digits) · two-way correction
+  ("good night" at 9:49 AM → "arre abhi toh subah ho rahi hai, 9:49 baje!") ·
+  photo fires on ask, silent on emotional msg · weather Tokyo w/ humidity +
+  hi/lo + link 4.1s · casual Hinglish 1.5s.
+- **413 STORM FOUND & FIXED (v12.39.1)**: gpt-oss-120b (BEST Groq brain) 413s
+  on EVERY key — Groq: "Limit 8000, Requested ~9200" tokens. Prompt outgrew
+  the 120b per-request budget → each msg burned ~1s × 16 keys (14s weather).
+  Fix: one 413 skips that model request-wide (weather 14.4s → 4.1s). 120b
+  UNUSABLE until prompt diet — llama-3.3-70b is de facto lead meanwhile.
+- **PROMPT DIET REQUIRED (pending Abhya's go)**: CRITICAL_RULES = 32,102 chars
+  (~8k tokens alone). Target: cut ~8k chars (25%) by merging overlapping rules
+  (3 emoji rules, scattered search rules, dup links/tone text) — NO behavior
+  loss intended; full battery after. Goal: requests ≤~7k tokens so the BEST
+  model leads again with history headroom ("best always works first" — Abhya).
+- **OpenRouter STILL a mystery**: dies in 1.2s with NOTHING logged even after
+  v12.39.0 added 429-body logging → failure is res-null/exception (fetch dying),
+  NOT a rate limit. Next deploy: log the null/catch paths. 1 key only
+  (_2.._5 empty) — Abhya decided 1 key + free-pool rotation is enough.
+- **Abhya's directives this session**: NO Monitoring Lab work until Bizli is
+  STABLE. Departments principle: each provider = a department, colleagues =
+  auto-adopt/auto-drop models, and the BEST model must always be tried first.
+- Local commits: b6463f8 (v12.39.0), 3399a43 (v12.39.1) + this checkpoint.
+
+## Earlier same day (v12.39.0 planning notes)
 
 ### What shipped (v12.39.0, tsc-clean)
 - **Two-way TIME awareness** (transcript bug: she said "1:58 AM" when the TODAY
