@@ -21,6 +21,25 @@
    briefing (or a trimmed version) to KV history as an assistant turn so
    follow-ups work like ChatGPT.
 
+### ABHYA'S DIRECTION for the search fix (2026-07-08) — "friend who googles for you"
+- Search must FEEL like Bizli herself did the searching — not a separate
+  "deep search" module bolted on. She's the friend who googled it for you:
+  presents findings in her own voice, with her own cognitive take/reasoning
+  on what she found ("okay so here's the thing —"), connecting facts,
+  flagging what's surprising or doubtful — extraordinary intelligence, but
+  hers. This SUPPORTS her personality instead of bypassing it.
+- Concretely: the !search briefing should be composed BY her persona brain
+  (persona + CRITICAL_RULES in the formatting call, not a bare persona-less
+  prompt) AND land in her KV history so follow-ups work — one continuous
+  mind, same as bug 2 below.
+
+### NEW FEATURE: /privacy command (2026-07-08)
+- Add a privacy-policy command to the native / menu (+ !privacy + USER_CARD
+  entry): what Bizli stores (memories, vault, gmail hash), where (KV +
+  Supabase), what she NEVER shares (creator privacy, no user data in
+  dashboard), how to wipe (!deleteme / !forget). Remember: menu changes
+  need /admin/set-menu re-run after deploy.
+
 ### Task board (Abhya's list, 2026-07-08)
 - ✅ v12.39.0: time/photo/roleplay brain fixes + weather image card + tools audit
 - ✅ v12.39.2: prompt diet — CRITICAL_RULES −38%, zero behavior loss
@@ -30,8 +49,11 @@
 
 ### Resume order next session
 1. Deploy the deep:true test hook → measure searchMs/formatMs → fix deep
-   search reliability (bug 1) + !search-to-history memory (bug 2).
-2. Then continue v12.41.0 games → v12.41.x DP tool → Abhya live pass →
+   search reliability (bug 1) + !search-to-history memory (bug 2) +
+   "friend who googles" persona voice (direction above) — one coherent
+   search overhaul.
+2. /privacy command (menu + !privacy + card entry, re-run set-menu).
+3. Then continue v12.41.0 games → v12.41.x DP tool → Abhya live pass →
    maintenance OFF decision.
 
 ---

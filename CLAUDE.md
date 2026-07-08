@@ -414,6 +414,14 @@ Verify:
 
 ## IDEAS BACKLOG (Abhya's notes — discuss at the right phase)
 
+- **"Friend who googles for you" search voice** (2026-07-08): search results
+  must feel like BIZLI searched — her own voice + cognitive take on findings,
+  composed by her persona brain and saved to her KV history (one continuous
+  mind). Phase: part of the deep-search fix, next session. No need to ask —
+  direction already given (details in CHECKPOINT.md).
+- **/privacy command** (2026-07-08): privacy-policy page in the native / menu
+  + !privacy — what's stored, where, what's never shared, how to wipe.
+  Phase: next session, after the search fix. Re-run /admin/set-menu after.
 - **Monitoring Lab** (2026-07-06): a dashboard home for self-tests + minor-bug
   tracking — test battery pass rates, self-improvement idea history, rules
   addendum contents, error trends. Phase: dashboard works after stabilization.
