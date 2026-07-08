@@ -10,7 +10,7 @@
   **Written but NEVER deployed** (probed live: deep flag falls through to
   the normal brain path). tsc clean; committed with this checkpoint.
 
-### DEEP SEARCH BUGS (Abhya's live findings — fix next session)
+### LIVE FINDINGS (Abhya, 2026-07-08 — fix next session)
 1. **!search deep mode not always working** — intermittent failures/empty
    results. Diagnose with the deep:true test hook once deployed (that was
    the exact purpose of the mid-work above).
@@ -20,6 +20,18 @@
    so her brain has no memory of it. Fix direction: append the !search
    briefing (or a trimmed version) to KV history as an assistant turn so
    follow-ups work like ChatGPT.
+3. **send_my_photo over-fires (photo spam)** — she shares her real photo too
+   easily. ROOT CAUSE: enforcement is prompt-only (tool description +
+   CRITICAL_RULES "only when asked / never twice") and prompt rules have now
+   FAILED TWICE for this tool (v12.38.2 hard-trigger, v12.39.0 unprompted-
+   clause deletion) — the executeTool case (tools.ts ~298) has ZERO code
+   guard. FIX = code, not more prose: per-user cooldown in executeTool
+   (KV flag e.g. `photo_sent_<userId>`, TTL ~24h, piggyback an existing
+   write if possible — KV write budget); when blocked, return a tool result
+   telling the model to answer in words ("photo already shared recently —
+   describe yourself instead"), NEVER silent-fail. Keep the model deciding
+   WHEN (brain-first intact) — code only caps FREQUENCY. The photo stays
+   special: rare = memorial-respectful.
 
 ### ABHYA'S DIRECTION for the search fix (2026-07-08) — "friend who googles for you"
 - Search must FEEL like Bizli herself did the searching — not a separate
@@ -52,8 +64,9 @@
    search reliability (bug 1) + !search-to-history memory (bug 2) +
    "friend who googles" persona voice (direction above) — one coherent
    search overhaul.
-2. /privacy command (menu + !privacy + card entry, re-run set-menu).
-3. Then continue v12.41.0 games → v12.41.x DP tool → Abhya live pass →
+2. send_my_photo code cooldown (bug 3) — small, ship alongside #1.
+3. /privacy command (menu + !privacy + card entry, re-run set-menu).
+4. Then continue v12.41.0 games → v12.41.x DP tool → Abhya live pass →
    maintenance OFF decision.
 
 ---
