@@ -43,6 +43,7 @@ import { runAgents } from './agents';
 import { handleAdmin } from './admin';
 import { detectIntent, handleUserCommand, handleCallback, sendForgotPinRequest, sendSupportPrompt } from './commands';
 import { handleAuth, startRecoverFlow } from './auth';
+import { searchWebDeep } from './search';
 import { handleGroupMessage } from './group';
 import { handleAdminStats, handleDashboard, handleWebChat } from './stats';
 import { handleLabAgent } from './lab';
@@ -98,6 +99,17 @@ export default {
       const history: any[] = Array.isArray(body.history) ? body.history.slice(-12) : [];
       const testChatId = "test:" + Math.random().toString(36).slice(2, 10);
       const t0 = Date.now();
+
+      // TEMP: body.deep = true → exercises the exact !search pipeline
+      // (searchWebDeep + the same formatting callGroq) with timing breakdown.
+      if (body.deep) {
+        const raw = await searchWebDeep(env, text);
+        const searchMs = Date.now() - t0;
+        if (!raw) return J({ ok: true, path: "deep", found: false, searchMs, ms: Date.now() - t0 });
+        const t2 = Date.now();
+        const formatted = await callGroq(env, [{ role: "user", content: `Present these search results as a DETAILED briefing: 5-8 informative bullet points (a full fact per bullet, with names/numbers/dates where the data has them), a one-line takeaway at the end, then 2-3 of the real source links from the data exactly as shown — prefer official/primary sources (government, official sites, major outlets) first. Complete sentences only — never stop mid-sentence. No filler, no invented links.\n\nQuery: ${text}\n\nData:\n${raw.slice(0, 4000)}` }], "");
+        return J({ ok: true, path: "deep", found: true, searchMs, formatMs: Date.now() - t2, rawLen: raw.length, formattedLen: (formatted || "").length, formatted, ms: Date.now() - t0 });
+      }
 
       const memContext = `[CURRENT USER: Test | Member since Jul 2026 | Platform: Telegram | PRIVACY: This is a strictly private 1-on-1 conversation.]`;
       const scriptHint = detectScript(text);

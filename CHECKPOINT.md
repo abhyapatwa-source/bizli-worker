@@ -1,6 +1,42 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-06 evening (v12.39.0/.1 — TIME AWARENESS + WEATHER CARD + 413 STORM FIX)
+## Last session: 2026-07-08 (short — DEEP SEARCH bugs logged, work parked)
+
+### State
+- Production: **v12.40.0** deployed + /health ok. Maintenance still ON.
+- Working tree: TEMP `deep:true` mode added to POST /admin/test-chat
+  (index.ts) — runs the exact !search pipeline (searchWebDeep + the same
+  formatting callGroq) with timing breakdown (searchMs/formatMs/lengths).
+  **Written but NEVER deployed** (probed live: deep flag falls through to
+  the normal brain path). tsc clean; committed with this checkpoint.
+
+### DEEP SEARCH BUGS (Abhya's live findings — fix next session)
+1. **!search deep mode not always working** — intermittent failures/empty
+   results. Diagnose with the deep:true test hook once deployed (that was
+   the exact purpose of the mid-work above).
+2. **Bizli can't see her own !search results** — after a !search, asking
+   her about what she just searched draws a blank: the deep-search briefing
+   is sent directly to Telegram and NEVER appended to `history_<userId>` KV,
+   so her brain has no memory of it. Fix direction: append the !search
+   briefing (or a trimmed version) to KV history as an assistant turn so
+   follow-ups work like ChatGPT.
+
+### Task board (Abhya's list, 2026-07-08)
+- ✅ v12.39.0: time/photo/roleplay brain fixes + weather image card + tools audit
+- ✅ v12.39.2: prompt diet — CRITICAL_RULES −38%, zero behavior loss
+- ✅ v12.40.0: self-improvement kit (battery tests + daily idea report + KV addendum)
+- ■ v12.41.0: games (menu + brain rules + memory) — IN PROGRESS / next up
+- □ v12.41.x: profile-photo tool #14 + light self-talk persona line
+
+### Resume order next session
+1. Deploy the deep:true test hook → measure searchMs/formatMs → fix deep
+   search reliability (bug 1) + !search-to-history memory (bug 2).
+2. Then continue v12.41.0 games → v12.41.x DP tool → Abhya live pass →
+   maintenance OFF decision.
+
+---
+
+## Previous session: 2026-07-06 evening (v12.39.0/.1 — TIME AWARENESS + WEATHER CARD + 413 STORM FIX)
 
 ### DEPLOYED + PROBE-VERIFIED (v12.39.1 live)
 - Time verbatim ("It's 09:58 AM" = exact header digits) · two-way correction
