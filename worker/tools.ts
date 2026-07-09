@@ -1,6 +1,6 @@
 import type { Env } from './types';
-import { searchGif } from './utils';
-import { sendTelegramAnimation, sendImageCard } from './telegram';
+import { searchGif, getGroqKeys } from './utils';
+import { sendTelegramAnimation, sendImageCard, downloadTelegramFile } from './telegram';
 import { searchWeb, readUrl } from './search';
 import { getWeather, getCurrency, getMovie, getTVShow, getCrypto, getStockPrice } from './apis';
 
@@ -134,6 +134,18 @@ export const BIZLI_TOOLS = [
   {
     type: "function",
     function: {
+      name: "look_at_profile_photo",
+      description: "Actually LOOK at a Telegram profile photo (DP) — the user's or your own. Use ONLY when the user asks about their profile picture ('how's my dp', 'have you seen my profile photo', 'rate my dp') or about yours ('what's your dp?').",
+      parameters: {
+        type: "object",
+        properties: { subject: { type: "string", enum: ["user", "me"], description: "'user' = the person you're chatting with, 'me' = your own profile photo" } },
+        required: ["subject"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "get_stock_price",
       description: "Get the LIVE price of a stock or market index. ALWAYS use this for any stock/share/index price question — never answer from memory. Use Yahoo Finance symbols, e.g. 'AAPL', 'TSLA', 'RELIANCE.NS' (Indian stocks need .NS), '^NSEI' (Nifty 50).",
       parameters: { type: "object", properties: { symbol: { type: "string", description: "Ticker symbol, e.g. 'AAPL' or 'RELIANCE.NS'" } }, required: ["symbol"] }
@@ -166,6 +178,74 @@ export async function checkRateLimit(env: Env, chatId: string, feature: keyof ty
   bucket.count++;
   await env.BIZLI_MEMORY.put(key, JSON.stringify(bucket), { expirationTtl: Math.ceil(cfg.windowMs / 1000) + 60 }).catch(() => {});
   return { allowed: true, remaining: cfg.max - bucket.count, resetInMin: Math.ceil((bucket.resetAt - now) / 60000) };
+}
+
+// Compact vision describe for the DP tool — direct Groq call (tools.ts can't
+// import brain.ts: brain imports tools). Vision model id read from the same
+// KV the auto-discovery maintains; scout is the verified-live default.
+// NOTE: checkpoint suggested OpenRouter-vision-first, but OR has ONE key and a
+// known silent-death issue — Groq scout is the proven path (deviation logged).
+async function describeImageGroqVision(env: Env, file: { base64: string; mime: string }): Promise<string> {
+  let vision = "meta-llama/llama-4-scout-17b-16e-instruct";
+  try {
+    const raw = await env.BIZLI_MEMORY.get("groq_live_models");
+    if (raw) { const p = JSON.parse(raw); if (p?.vision) vision = p.vision; }
+  } catch {}
+  for (const key of getGroqKeys(env).slice(0, 3)) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        body: JSON.stringify({
+          model: vision, max_tokens: 160, temperature: 0.4,
+          messages: [{ role: "user", content: [
+            { type: "text", text: "Describe this profile photo in 2-3 specific sentences: who/what is in it, colors, style, overall vibe. No preamble, no opinions about attractiveness." },
+            { type: "image_url", image_url: { url: `data:${file.mime};base64,${file.base64}` } },
+          ] }],
+        }),
+      });
+      if (!r.ok) continue;
+      const d = await r.json() as any;
+      const t = d?.choices?.[0]?.message?.content?.trim();
+      if (t) return t;
+    } catch { continue; }
+  }
+  return "";
+}
+
+// Look at a Telegram DP (user's or the bot's own). Description cached by
+// file_unique_id — a CHANGED dp gets a new id so it's ALWAYS re-seen fresh,
+// while the same dp never burns vision quota twice (no stale-cache problem).
+async function describeProfilePhoto(env: Env, chatId: string, subject: "user" | "me"): Promise<string> {
+  try {
+    let targetId = chatId;
+    if (subject === "me") {
+      let botId: number | null = null;
+      try { const info = await env.BIZLI_MEMORY.get("bot_info"); if (info) botId = JSON.parse(info).id; } catch {}
+      if (!botId) {
+        const me = await (await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`)).json() as any;
+        botId = me?.result?.id || null;
+      }
+      if (!botId) return "";
+      targetId = String(botId);
+    }
+    if (!/^\d+$/.test(targetId)) return ""; // web/test sessions have no Telegram DP
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getUserProfilePhotos?user_id=${targetId}&limit=1`);
+    const data = await res.json() as any;
+    const sizes = data?.result?.photos?.[0];
+    if (!sizes?.length) return "NO_PHOTO";
+    const best = sizes[sizes.length - 1];
+    const cacheKey = `dp_desc_${subject === "me" ? "bot" : targetId}_${best.file_unique_id}`;
+    const cached = await env.BIZLI_MEMORY.get(cacheKey);
+    if (cached) return cached;
+    const rl = await checkRateLimit(env, chatId, "vision");
+    if (!rl.allowed) return "";
+    const file = await downloadTelegramFile(env, best.file_id);
+    if (!file) return "";
+    const desc = await describeImageGroqVision(env, file);
+    if (desc) await env.BIZLI_MEMORY.put(cacheKey, desc, { expirationTtl: 30 * 86400 }).catch(() => {});
+    return desc;
+  } catch { return ""; }
 }
 
 export async function executeTool(env: Env, toolName: string, args: any, chatId: string): Promise<string> {
@@ -360,6 +440,19 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
       case "show_map": {
         const q = encodeURIComponent(args.query || "");
         return `📍 ${args.query}\nhttps://maps.google.com/maps?q=${q}`;
+      }
+      case "look_at_profile_photo": {
+        const subject = args.subject === "me" ? "me" as const : "user" as const;
+        const desc = await describeProfilePhoto(env, chatId, subject);
+        if (desc === "NO_PHOTO") {
+          return subject === "me"
+            ? "you don't have a profile photo set right now — say so honestly in your own voice"
+            : "the user has no profile photo set (or it's hidden by their privacy settings) — tell them honestly, maybe playfully suggest they set one";
+        }
+        if (!desc) return "couldn't see the profile photo right now — say so honestly, NEVER invent what it looks like";
+        return subject === "me"
+          ? `You just looked at YOUR OWN current profile photo. What you see: ${desc}\nReact naturally in your own voice — it's your dp.`
+          : `You just looked at the USER'S Telegram profile photo. What you see: ${desc}\nReact like a friend who actually saw it — specific and warm, never a generic compliment.`;
       }
       case "get_crypto_price": {
         const c = await getCrypto(args.coin || "");

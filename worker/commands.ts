@@ -116,6 +116,34 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
     return;
   }
 
+  // Games menu tap → HER BRAIN starts the game (per the GAMES rules) and the
+  // opener lands in KV history — the game then continues in normal chat, one
+  // continuous mind, no separate game engine.
+  if (data.startsWith("game:")) {
+    const GAME_NAMES: Record<string, string> = {
+      q20: "20 Questions (the user thinks of something, YOU ask yes/no questions and guess)",
+      wc: "Word Chain", tr: "Trivia", em: "Emoji Movie Guess", ri: "Riddles", wyr: "Would You Rather",
+    };
+    const gameName = GAME_NAMES[data.slice(5)];
+    if (!gameName) { await answerCallback(env, cbId, ""); return; }
+    await answerCallback(env, cbId, "🎮");
+    const identity = await db(env, `platform_identities?platform=eq.telegram&platform_id=eq.${fromId}&limit=1`);
+    const gUserId = identity?.[0]?.user_id;
+    const hist = gUserId
+      ? (await getKVHistory(env, gUserId)).filter((m: any) => m.role !== "system").map((m: any) => ({ role: m.role, content: m.content }))
+      : [];
+    const starter = `[The user just tapped "${gameName}" in your games menu. Start this game RIGHT NOW per your GAMES rules — one short fun opener + your first move. Match the language of the recent conversation (English if none).]`;
+    let opener = "";
+    try { opener = await callGroq(env, [...hist, { role: "user", content: starter }], todayContext(), fromId, false); } catch {}
+    if (!opener.trim()) opener = "let's play! 🎮 you start — I'm ready";
+    await sendTelegram(env, fromId, opener);
+    if (gUserId) {
+      await appendKVHistory(env, gUserId, "user", `[started game: ${gameName.split(" (")[0]}]`);
+      await appendKVHistory(env, gUserId, "assistant", opener);
+    }
+    return;
+  }
+
   if (data.startsWith("help:")) {
     const payload = data.slice("help:".length);
     if (payload.startsWith("r:")) {
@@ -712,6 +740,40 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
         await appendKVHistory(env, userId, "user", `[used !search: ${query}]`);
         await appendKVHistory(env, userId, "assistant", cutAtSentence(briefing, 490));
     } else { await sendTelegram(env, chatId, "nothing found."); }
+    return true;
+  }
+
+  if (lower === "!privacy") {
+    await reply(
+`🔐 YOUR PRIVACY WITH BIZLI
+
+What I store:
+• your profile (name, email, optional birthday/city) — for your account only
+• our recent chats + the memories you share — so I can be a real friend
+• my own little diary of moments (feelings, never your secrets)
+
+Where: secured storage (Cloudflare + Supabase). Never sold, never shared with anyone, never used to train anything.
+
+What I NEVER do:
+• show your details to any other user — every chat is fully isolated
+• put your name or messages on any dashboard or public page
+• share my creator's personal info (yours gets the same protection)
+
+You're in control, always:
+• !memories — see everything I remember about you
+• !forget <n|all> — make me forget
+• !deleteme — verified full wipe of your account + data, no undo
+
+Full policy: bizli-worker.bizlibix.workers.dev/privacy 💛`);
+    return true;
+  }
+
+  if (lower === "!games" || lower === "!play") {
+    await reply("🎮 GAME TIME! pick one 👇\n\n(or just say it in chat — \"let's play 20 questions\" works too)", [
+      [{ text: "🕵️ 20 Questions", callback_data: "game:q20" }, { text: "🔗 Word Chain", callback_data: "game:wc" }],
+      [{ text: "🧠 Trivia", callback_data: "game:tr" }, { text: "🎬 Emoji Movie", callback_data: "game:em" }],
+      [{ text: "🧩 Riddles", callback_data: "game:ri" }, { text: "🤔 Would You Rather", callback_data: "game:wyr" }],
+    ]);
     return true;
   }
 

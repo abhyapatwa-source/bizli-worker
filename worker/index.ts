@@ -64,9 +64,11 @@ export default {
         body: JSON.stringify({ commands: [
           { command: "help", description: "all my commands" },
           { command: "search", description: "deep web search — ask me anything" },
+          { command: "games", description: "play a game with me 🎮" },
           { command: "settings", description: "timezone & daily greetings" },
           { command: "memories", description: "what I remember about you" },
           { command: "status", description: "am I feeling okay?" },
+          { command: "privacy", description: "what I store & how to wipe it" },
           { command: "feedback", description: "tell my developer what you think" },
           { command: "support", description: "reach my developer" },
           { command: "admin", description: "admin access (password protected)" },
@@ -304,7 +306,7 @@ async function processTelegramUpdate(update: any, env: Env): Promise<Response> {
   // Native / menu aliases (registered with Telegram via setMyCommands) → ! commands
   {
     const firstWord = text.trim().split(/\s+/)[0].toLowerCase().replace(/@[a-z0-9_]+$/i, "");
-    const slashAliases: Record<string, string> = { "/help": "!help", "/search": "!search", "/settings": "!settings", "/memories": "!memories", "/status": "!status", "/feedback": "!feedback", "/support": "!support", "/admin": "!admin" };
+    const slashAliases: Record<string, string> = { "/help": "!help", "/search": "!search", "/games": "!games", "/settings": "!settings", "/memories": "!memories", "/status": "!status", "/privacy": "!privacy", "/feedback": "!feedback", "/support": "!support", "/admin": "!admin" };
     if (slashAliases[firstWord]) text = slashAliases[firstWord] + text.trim().slice(text.trim().split(/\s+/)[0].length);
   }
 

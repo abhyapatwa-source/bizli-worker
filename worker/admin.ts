@@ -79,7 +79,11 @@ const USER_CARD: CardGroup[] = [
     { cmd: "!support <msg>", desc: "reach my developer", btn: "🆘 Support", example: "!support the bot feels slow today", run: "!support" },
     { cmd: "!feedback <msg>", desc: "tell us anything", btn: "📝 Feedback", example: "!feedback loving the new menus!", ask: "tell me anything — just type your feedback 👇" },
     { cmd: "!forgotpin", desc: "PIN reset request", btn: "🔑 Forgot PIN", run: "!forgotpin" },
+    { cmd: "!privacy", desc: "what I store & never share", btn: "🔐 Privacy", run: "!privacy" },
     { cmd: "!deleteme", desc: "delete my account & data", btn: "❌ Delete Me", run: "!deleteme" },
+  ] },
+  { group: "🎮 Games", items: [
+    { cmd: "!games", desc: "play with me — 6 chat games", btn: "🎮 Games Menu", run: "!games" },
   ] },
 ];
 
