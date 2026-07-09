@@ -44,7 +44,11 @@ export function detectScript(text: string): string {
   if (/\b(kya|nahi|nahin|haan|theek|thik|acha|achha|accha|bohot|bahut|bata|batao|raha|rahi|raho|karo|yaar|bhai|behen|matlab|waise|sach|kal|aaj|toh|abhi|phir|kaisa|kaisi|kaise|mujhe|tera|tere|teri|apna|apni|apne|kyun|kitna|kitne|kuch|kux|kuxh|nahu|mein|tum|aap|woh|yeh|hai|hoon|kar|ke|ki|ka|pe|laga|lagta|lagti|chal|chall|bol|bolo|suno|dek|dekh|sab|zyada|thoda|dobara|pehle|baad|saath|pyar|dost|didi|jaan|beti|chaiye|chahiye|chahti|chahta|padh|likh|khao|pijo|jana|aana|jao|aao|hua|hui|hoga|hogi)\b/i.test(t)) {
     return "Hinglish in Roman/Latin script — reply in Roman letters (NEVER Devanagari), mixing casual Hindi and English";
   }
-  return "English — reply in English";
+  // Latin script ≠ English: Spanish/French/German/Portuguese users were being
+  // locked into ENGLISH replies (probe 2026-07-10: "hola! tu puedes ayudarme…"
+  // → English). The lock now names the family and lets the model identify the
+  // language — English stays the default ONLY for actual English text.
+  return "Latin script — if the message is in English, reply in English; if it is another Latin-script language (Spanish, French, German, Portuguese, Italian, Indonesian, Turkish, Vietnamese, etc.), reply in THAT same language. Never default to English for non-English text";
 }
 
 // Heuristic tone/sentiment classifier — pure regex, zero API calls, < 1ms.

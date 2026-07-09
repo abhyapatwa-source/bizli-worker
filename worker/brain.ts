@@ -51,6 +51,11 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.40.6 — LATIN-SCRIPT LANGUAGE LOCK FIX (international-users bug, probe-
+// caught): detectScript labeled EVERY Latin-script language "English — reply
+// in English", locking Spanish/French/German/Portuguese users into English
+// replies. The Latin fallback now tells the model to identify and mirror the
+// actual language; English remains default only for real English text.
 // v12.40.5 — INFRASTRUCTURE HARDENING (stability sessions, 2026-07-10):
 // (1) cron battery runs via SELF-FETCH to /admin/run-tests — its own
 //     invocation, fresh subrequest budget (was sharing the cron invocation's
@@ -141,7 +146,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.40.5";
+export const BIZLI_VERSION = "v12.40.6";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
