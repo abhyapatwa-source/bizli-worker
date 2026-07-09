@@ -106,6 +106,8 @@ export async function handleGroupMessage(env: Env, msg: any): Promise<boolean> {
     let reply = await callGroq(env, messages, groupSystemContext, groupChatId, true);
     if (reply === "IMAGE_GENERATED") return true;
     if (reply.startsWith("RICH_SENT:")) return true;
+    // NEVER-SILENT: same guard as the DM path — Telegram drops empty messages.
+    if (!reply.trim()) reply = "okay my thoughts scrambled for a sec 😅 say that again?";
     await sendTelegram(env, groupChatId, reply, { reply_to_message_id: msg.message_id });
     if (userId) setTimeout(() => autoExtractMemory(env, userId!, cleanText, reply).catch(() => {}), 0);
     return true;

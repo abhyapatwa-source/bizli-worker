@@ -249,8 +249,10 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
           "hawaii": "Pacific/Honolulu", "alaska": "America/Anchorage",
         };
         let tz = "";
+        // Word-boundary match, not substring — "Indianapolis" contains "india"
+        // and was getting Asia/Kolkata instead of falling through to geocoding.
         for (const [key, zone] of Object.entries(tzMap)) {
-          if (locLower.includes(key)) { tz = zone; break; }
+          if (new RegExp(`\\b${key}\\b`).test(locLower)) { tz = zone; break; }
         }
         if (!tz && loc) {
           try {
@@ -296,9 +298,20 @@ export async function executeTool(env: Env, toolName: string, args: any, chatId:
         return m || "Movie not found";
       }
       case "send_my_photo": {
+        // CODE guard, not prompt (prompt-only rules failed twice — v12.38.2,
+        // v12.39.0): one real photo per user per 24h. The model still decides
+        // WHEN (brain-first intact) — code only caps FREQUENCY. Never silent:
+        // when blocked, the tool result tells the model to answer in words.
         if (chatId) {
+          const cdKey = `photo_sent_${chatId}`;
+          if (await env.BIZLI_MEMORY.get(cdKey)) {
+            return "photo_already_shared_recently — do NOT send it again now; describe yourself warmly in words instead (the photo stays special, shared rarely)";
+          }
           const ok = await sendImageCard(env, chatId, (args.caption || "this is me 🐾").slice(0, 200), "https://bizli-worker.bizlibix.workers.dev/bizli-real.jpg");
-          if (ok) return "photo_sent — the user is now looking at your real photo; reply naturally in your own voice (don't re-describe or narrate the sending)";
+          if (ok) {
+            await env.BIZLI_MEMORY.put(cdKey, "1", { expirationTtl: 86400 }).catch(() => {});
+            return "photo_sent — the user is now looking at your real photo; reply naturally in your own voice (don't re-describe or narrate the sending)";
+          }
         }
         return "photo_unavailable right now — tell them warmly you'll show them another time";
       }

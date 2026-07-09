@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import { db } from './db';
 import { callGroq } from './brain';
-import { getGeminiKeys } from './utils';
+import { getGeminiKeys, todayContext } from './utils';
 import { sendTelegram } from './telegram';
 
 const TEST_SUITE = [
@@ -159,11 +159,23 @@ export async function runBizliTests(env: Env): Promise<{ run: number; passed: nu
   if (lastRun && now - parseInt(lastRun) < 21_600_000) return { run: 0, passed: 0 };
   await env.BIZLI_MEMORY.put("last_test_run", String(now), { expirationTtl: 25200 });
 
+  // SUBREQUEST BUDGET: the full 12-probe battery in ONE invocation blew
+  // Cloudflare's per-invocation subrequest cap (live 2026-07-09: "Too many
+  // subrequests" mid-battery → false "ALL BRAINS FAILED" + the 12th test
+  // never ran + getTestStats starved). Half the suite per 6h gate, rotating
+  // pointer — full coverage every 12h with plenty of headroom.
+  const BATCH_SIZE = 6;
+  const ptr = parseInt(await env.BIZLI_MEMORY.get("test_batch_ptr").catch(() => null) || "0") % TEST_SUITE.length;
+  const batch = Array.from({ length: BATCH_SIZE }, (_, k) => TEST_SUITE[(ptr + k) % TEST_SUITE.length]);
+  await env.BIZLI_MEMORY.put("test_batch_ptr", String((ptr + BATCH_SIZE) % TEST_SUITE.length), { expirationTtl: 604800 }).catch(() => {});
+
   let run = 0, passed = 0;
-  for (const test of TEST_SUITE) {
+  for (const test of batch) {
     try {
       const messages = [{ role: "user", content: test.prompt }];
-      const response = await callGroq(env, messages, "", "test_runner", test.tools, false);
+      // todayContext mirrors production (every real chat gets the TODAY
+      // header) — without it time_verbatim fails on rig-fidelity, not brain.
+      const response = await callGroq(env, messages, todayContext(), "test_runner", test.tools, false);
 
       const { passed: p, score, reason } = await scoreWithGemini(env, test.prompt, response, test.criteria);
 

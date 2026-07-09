@@ -51,6 +51,19 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.40.4 — FULL-CODEBASE SWEEP FIXES (2026-07-10 audit of every worker file):
+// (1) send_my_photo CODE cooldown — 24h per-user KV flag in executeTool
+//     (prompt rules failed twice; model still decides WHEN, code caps
+//     FREQUENCY; blocked = tool result says describe in words, never silent);
+// (2) battery subrequest budget — 6 probes per 6h gate w/ rotating pointer
+//     (12 in one invocation blew the CF subrequest cap: false ALL-BRAINS-
+//     FAILED + 12th test never ran) + todayContext in the rig (time_verbatim
+//     was failing on rig-fidelity, not brain);
+// (3) detectScript Hinglish list purged of English/European collisions
+//     (main/nah/ha/ho/beta/par/sun/koi/tu/se/mai… were Hinglish-locking pure
+//     English and Spanish messages) + "kaise" added;
+// (4) get_current_time tzMap word-boundary match (Indianapolis ≠ India);
+// (5) group replies never-silent guard; (6) dashboard TOOL_KEY_MAP synced.
 // v12.40.3 — RAW TOOL DUMP BANNED (live incident 2026-07-09/10: synthesis
 // 413'd on gpt-oss-120b across all 3 retry keys → the "⚡ LIVE WEB RESULTS"
 // grounding block reached a user verbatim): (1) all 4 synthesis-failure
@@ -119,7 +132,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.40.3";
+export const BIZLI_VERSION = "v12.40.4";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

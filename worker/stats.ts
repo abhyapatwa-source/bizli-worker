@@ -7,19 +7,14 @@ import { BIZLI_TOOLS } from './tools';
 import { getKVHistory, appendKVHistory, getRelevantMemories } from './memory';
 import { getTestStats } from './tests';
 
+// Which secret each ACTIVE tool depends on — tools without an entry are
+// keyless (open-meteo, Yahoo, CoinGecko, exchangerate, nominatim, maps links).
+// Stale entries here made the dashboard Tools tab show wrong key status.
 const TOOL_KEY_MAP: Record<string, string> = {
-  get_weather:     "API_NINJAS_KEY",
-  get_news:        "NEWS_API_KEY",
-  get_movie_info:  "TMDB_API_KEY",
-  get_movie_poster:"TMDB_API_KEY",
-  get_trending:    "TMDB_API_KEY",
-  generate_image:  "HF_API_KEY",
-  get_nasa_apod:   "NASA_API_KEY",
   search_web:      "TAVILY_API_KEY",
+  get_movie_info:  "TMDB_API_KEY",
   send_gif:        "GIPHY_API_KEY",
-  get_stock_price: "API_NINJAS_KEY",
-  get_fun_fact:    "API_NINJAS_KEY",
-  get_holidays:    "API_NINJAS_KEY",
+  search_youtube:  "GOOGLE_API_KEY",
 };
 
 const STATS_CORS = {
