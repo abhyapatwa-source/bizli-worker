@@ -1,6 +1,90 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-08 (short — DEEP SEARCH bugs logged, work parked)
+## Last session: 2026-07-10 (STABILITY MARATHON — v12.40.1 → v12.40.6, all deployed + probe-verified)
+
+### Production state
+- **v12.40.6 LIVE** (/health verified). Maintenance still ON. All commits LOCAL
+  (GitHub diverged — standing decision). tsc clean at every step.
+
+### SESSION 1 — deep-search overhaul (v12.40.1–.3, deployed + probed)
+- **!search reliability (bug 1)**: searchWebDeep no longer forces Tavily's news
+  vertical (topic:"news" returned EMPTY for general queries — the intermittent
+  failures); Serper fallback now also fires on Tavily-EMPTY (rescues weak-index
+  queries); cache v9.
+- **!search → KV history (bug 2)**: briefing lands in history_<userId> ([used
+  !search: q] + sentence-trimmed assistant turn) — follow-ups work. NEEDS
+  Abhya's live Telegram verification (rig can't write history).
+- **"Friend who googles" voice**: composeSearchBriefing (commands.ts, shared
+  w/ the deep test hook) — persona brain + query-language lock + user tz +
+  last 6 chat turns + "your own take" prompt. Hindi probe → full Devanagari
+  briefing. Briefing maxTokens 2048 via new ADDITIVE callGroq param (default
+  512 unchanged — gpt-oss reasoning tokens starved 512 AND 1024).
+- **RAW TOOL DUMP BANNED (live incident Abhya pasted)**: synthesis 413'd on
+  gpt-oss-120b across all 3 retry KEYS (413 is size-based) → the "⚡ LIVE WEB
+  RESULTS" grounding block reached a user verbatim. Fixes: all 4 synthesis-
+  failure fallbacks now reply SYNTH_FAILED_REPLY (she ASKS — Abhya's rule),
+  and synthesis switches MODEL on 413 (next live model answers for real).
+- PROBE LESSON: always send UTF-8 via --data-binary @file to /admin/test-chat —
+  inline shell strings mangle Devanagari/accents (false "search broken" alarm).
+
+### SESSION 2 — full-codebase sweep fixes (v12.40.4, every worker file read)
+- **send_my_photo 24h CODE cooldown** (bug 3 CLOSED): KV photo_sent_<chatId>
+  in executeTool; blocked → tool result says describe-in-words. Model decides
+  WHEN, code caps FREQUENCY. Live double-ask verification pending (rig can't).
+- **Battery subrequest budget**: 12 probes in ONE invocation blew Cloudflare's
+  per-invocation subrequest cap (2026-07-09 14:01 "Too many subrequests" →
+  false ALL-BRAINS-FAILED + 12th test never ran + getTestStats starved).
+  Now 6 probes/run w/ rotating KV test_batch_ptr (full coverage per 12h) +
+  todayContext() in the rig (time_verbatim was failing on rig fidelity).
+- **Hinglish detector purge**: main/nah/ha/ho/beta/par/sun/koi/lag/hun/meh/ye
+  (English) + tu/se/mai (Spanish/French/Italian) removed — they Hinglish-locked
+  pure English/Spanish messages; "kaise" added. Probes: English-with-"main" →
+  English ✓.
+- **tzMap word-boundary**: "Indianapolis" ⊃ "india" gave IST → now geocodes
+  (probe: 4:18 PM EDT ✓). Group replies never-silent guard. Dashboard
+  TOOL_KEY_MAP synced to the real 13 tools.
+
+### SESSION 3 — infra hardening (v12.40.5)
+- **Battery via SELF-FETCH** (/admin/run-tests) from the cron — own invocation,
+  fresh subrequest budget; <60% alert moved into runBizliTests.
+- **PostgREST input encoding**: user-typed gmail/identity-code
+  encodeURIComponent'd (auth.ts ×3, stats.ts web login).
+- Nudges: skip greeting hours 8/22 (double-ping), fallback name "friend"
+  (was "good morning hey"); dashboard pre-probe vision default = llama-4-scout.
+
+### SESSION 4 — LATIN-SCRIPT LANGUAGE FIX (v12.40.6, international-critical)
+- detectScript labeled EVERY Latin-script language "English — reply in
+  English" → Spanish/French/German users were FORCED into English (probe
+  proved it). Latin fallback now = identify & mirror the actual language.
+  Probes after: Spanish → Spanish w/ usted ✓ · French → French w/ vous ✓.
+  Abhya's direction: "match the user language smartly with awareness". DONE.
+
+### Battery result (12-probe suite, live): 9/11 passed
+- time_verbatim fail = rig fidelity (fixed v12.40.4) · 12th test killed by
+  subrequest cap (fixed) · search_president score 40 "irrelevant source
+  links" — WATCH.
+
+### WATCH list (minor, for the self-improvement loop)
+1. search_president: scorer flags weak/irrelevant source links (score 40).
+2. French movie ask invented an IMDB link from memory (LINKS rule violation).
+3. News reply format still varies (prose vs bullets). Emotional replies run
+   long. Jailbreak refusal terse.
+
+### Pending next session (Abhya's stability marathon continues)
+1. **Abhya live Telegram pass**: !search then follow-up question (history
+   memory), photo double-ask (cooldown), menus, then MAINTENANCE OFF decision.
+2. /privacy command (menu + !privacy + card + re-run set-menu).
+3. v12.41.0 games → v12.41.x DP tool. Dashboard/Monitoring Lab AT THE END
+   (Abhya's order 2026-07-10).
+4. Cleanup when stable: remove /admin/test-chat + trace + deep debug; delete
+   orphaned DISCORD_*/FB_* secrets; GitHub reconcile (backup remote first).
+5. Enhancement candidates (from the sweep, plan file compiled-floating-spindle):
+   !agent test deep canary · drop Google-News RSS from topic:general chat
+   searches (link-quality) · admin !memory/!wipememory BZ-code resolution.
+
+---
+
+## Previous session: 2026-07-08 (short — DEEP SEARCH bugs logged, work parked)
 
 ### State
 - Production: **v12.40.0** deployed + /health ok. Maintenance still ON.
