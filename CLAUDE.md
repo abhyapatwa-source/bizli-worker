@@ -42,7 +42,7 @@ She is NOT an Indian-only bot. She serves users globally, in their own languages
 - **Telegram:** @BizliAI_bot
 - **Current users:** 11 approved, 0 waitlist
 
-### Current version: v12.40.6 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
+### Current version: v12.41.0 (see BIZLI_VERSION in worker/brain.ts — single source of truth)
 
 ### BRAIN-FIRST (v12.31.0, completed v12.37.2) — ALL keyword layers are DEAD
 Every chat message in every language goes: commands check → brain (callGroq +
@@ -151,7 +151,7 @@ worker/
 - 5 Gemini keys: GEMINI_API_KEY, _2, _3, _4, _5 (Lab + embeddings only)
 - 5 Tavily keys: TAVILY_API_KEY, _2, _3, _4, _5
 - Other API keys: OPENROUTER, GOOGLE, GIPHY, TMDB, GUARDIAN, NEWS, NASA, API_NINJAS, SERPER, HF
-- Platform: TELEGRAM_BOT_TOKEN (FB_* and DISCORD_* secrets are ORPHANED since v12.37.x — delete from Cloudflare when convenient)
+- Platform: TELEGRAM_BOT_TOKEN (orphaned FB_*/DISCORD_* secrets DELETED from Cloudflare 2026-07-10)
 - Storage: SUPABASE_URL, SUPABASE_SERVICE_KEY
 - Auth: ADMIN_CHAT_ID, ADMIN_PASSWORD
 - KV namespace: BIZLI_MEMORY
@@ -164,7 +164,7 @@ worker/
 
 ---
 
-## BIZLI'S 13 ACTIVE TOOLS (in BIZLI_TOOLS)
+## BIZLI'S 14 ACTIVE TOOLS (in BIZLI_TOOLS)
 
 1. **get_weather** — current weather, any location worldwide (wttr.in + open-meteo)
 2. **get_current_time** — time in any city/country (timezone-aware, geocoding fallback)
@@ -178,7 +178,8 @@ worker/
 10. **show_map** — Google Maps URL
 11. **get_crypto_price** — live crypto prices (CoinGecko) — added v12.31.0
 12. **get_stock_price** — live stock/index prices (Yahoo Finance) — added v12.31.0
-13. **send_my_photo** — her ONE real-life photo (the memorial cat), KV `bizli_real_photo` served at /bizli-real.jpg — added v12.38.0. Model-decided (asked "what do you look like" or rare fitting moments). Replies mentioning !support auto-get a 🆘 flash button (index.ts) — covers suspicious creator-probing.
+13. **send_my_photo** — her ONE real-life photo (the memorial cat), KV `bizli_real_photo` served at /bizli-real.jpg — added v12.38.0. Model-decided (asked "what do you look like" or rare fitting moments) + 24h per-user CODE cooldown in executeTool (v12.40.4). Replies mentioning !support auto-get a 🆘 flash button (index.ts) — covers suspicious creator-probing.
+14. **look_at_profile_photo** — sees Telegram DPs (user|me) via getUserProfilePhotos → Groq scout vision; description KV-cached by file_unique_id (changed DP always re-seen) — added v12.41.0.
 
 ### Keyword router — DELETED (v12.31.0)
 `detectIntent()` keeps ONLY the image-generation flow. All informational
@@ -215,11 +216,15 @@ tool backends — nothing else references it.
 - Admin realms: !admin = PEOPLE (users/approve/deny/block/msg/broadcast…),
   !agent = SYSTEM (status/quota/test/models/errors/kv/uptime/report/clear…).
   Removed: !ping, !brains, !stats, !storage, !agent users + all aliases.
-- Native / menu (8 commands since v12.38.0): /help /search /settings
-  /memories /status /feedback /support /admin — all alias to ! commands
-  (registered via /admin/set-menu?key=<ADMIN_PASSWORD>, re-run after
-  changing the menu). Bare /search /feedback /admin ask conversationally
-  (await_input / admin_pw_wait states).
+- Native / menu (10 commands since v12.41.0): /help /search /games /settings
+  /memories /status /privacy /feedback /support /admin — all alias to !
+  commands (registered via /admin/set-menu?key=<ADMIN_PASSWORD>, re-run after
+  changing the menu; last re-run 2026-07-10). Bare /search /feedback /admin
+  ask conversationally (await_input / admin_pw_wait states).
+- GAMES (v12.41.0): !games / /games = 6-button menu; game: callbacks start the
+  game THROUGH callGroq (GAMES rules block in CRITICAL_RULES) and the opener
+  lands in KV history — games continue in normal chat, no engine. !privacy /
+  /privacy = privacy card (USER_CARD Help group; web page at /privacy).
 - !admin has NO fallback password since v12.32.0 — fails closed if the
   ADMIN_PASSWORD secret is unset. Lockout v2 (v12.38.0, admin.ts): 3 wrong
   passwords → 12h lock (Support + Recover-by-Gmail buttons); recovery gmail

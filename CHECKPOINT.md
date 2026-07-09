@@ -1,6 +1,64 @@
 # CHECKPOINT — Bizli Project Day-to-Day State
 
-## Last session: 2026-07-10 (STABILITY MARATHON — v12.40.1 → v12.40.6, all deployed + probe-verified)
+## Last session: 2026-07-10 LATE (FEATURE COMPLETION — v12.41.0 deployed; backlog cleared except dashboard + GitHub)
+
+### Production state
+- **v12.41.0 LIVE** (/health ✓). Maintenance still ON. Native menu re-registered
+  (10 commands, ok:true). All commits LOCAL. Orphaned DISCORD_*/FB_* secrets
+  DELETED from Cloudflare (5 secrets, zero code refs verified first).
+
+### SESSION C — /privacy (shipped in v12.41.0)
+- !privacy card (what's stored/never shared/how to wipe + /privacy web link),
+  /privacy menu alias, USER_CARD Help-group entry (appended — old button
+  indices safe), set-menu list now 10 commands (re-run DONE post-deploy).
+
+### SESSION D — GAMES v12.41.0 (shipped, probe-verified)
+- 6 brain-hosted games (20Q she-guesses, Word Chain, Trivia, Emoji Movie,
+  Riddles, Would You Rather): !games//games → 6-button menu; game: callbacks
+  start the game THROUGH callGroq and the opener LANDS IN KV HISTORY (one
+  continuous mind — games continue in normal chat, zero game-engine code).
+- GAMES rules block in CRITICAL_RULES (~900 chars, prompt-diet-conscious) +
+  "games" category in autoExtractMemory + 🎮 USER_CARD group.
+- Probes: "lets play 20 questions" → "Q1: Is it a living thing?" ✓ ·
+  continuation w/ history → "Q2: does it have fur?" ✓.
+
+### SESSION E — TOOL #14 look_at_profile_photo (shipped)
+- getUserProfilePhotos (user|me; me = bot's own DP via bot_info/getMe) →
+  Groq scout vision (direct call in tools.ts — can't import brain.ts,
+  circular) → 2-3 sentence description → KV cache dp_desc_* keyed by
+  file_unique_id (changed DP ALWAYS re-seen; same DP never re-visioned).
+  Vision rate-limit charged only on cache miss. Honest NO_PHOTO/can't-see
+  tool results. PROFILE PHOTOS rule line in CRITICAL_RULES; TOOLS line = 14.
+- DEVIATION from old checkpoint note: Groq-scout-first, NOT OpenRouter-first
+  (OR = 1 key + unexplained silent deaths; scout is verified-live vision).
+- Probe: "have you seen my profile photo?" → tool fired, honest can't-see
+  (rig has no real Telegram id). REAL DP needs Abhya's live test.
+
+### SESSION F — cleanup
+- 5 orphaned secrets deleted (DISCORD_APP_ID/_BOT_TOKEN/_PUBLIC_KEY,
+  FB_PAGE_ACCESS_TOKEN/_VERIFY_TOKEN). CLAUDE.md synced (14 tools, 10-command
+  menu, games/privacy sections, version).
+- KEPT deliberately: POST /admin/test-chat + trace + deep debug — still the
+  only probe rig; remove AFTER Abhya's live pass + maintenance OFF.
+
+### WATCH (new)
+- One 20Q continuation probe returned bare "Q" (1 of 4 runs, key 14) — raw
+  model flake, not sanitizer (FILLER_TAIL can't match game questions). If it
+  recurs, consider a min-length reply guard (careful: "ok"/emoji replies are
+  legit short).
+
+### REMAINING WORK (only these)
+1. **Abhya live Telegram pass** → maintenance OFF decision: !search + follow-up
+   (history), photo twice (cooldown), /games tap-through, /privacy, DP ask
+   ("how's my dp"), menus.
+2. **Dashboard / Monitoring Lab** — parked for the end (Abhya's order).
+3. **GitHub reconcile** — parked (Abhya's order); back up remote first, ever.
+4. Post-live-pass cleanup: remove test-chat rig; WATCH items via the
+   self-improvement loop.
+
+---
+
+## Previous session: 2026-07-10 (STABILITY MARATHON — v12.40.1 → v12.40.6, all deployed + probe-verified)
 
 ### Production state
 - **v12.40.6 LIVE** (/health verified). Maintenance still ON. All commits LOCAL
