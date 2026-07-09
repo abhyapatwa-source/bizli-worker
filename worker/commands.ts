@@ -1,9 +1,9 @@
 import type { Env } from './types';
 import { db } from './db';
-import { getGroqKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB } from './utils';
+import { getGroqKeys, cityToTimezone, inferTimezoneFromLangCode, calculateAge, parseDOB, detectScript, todayContext } from './utils';
 import { sendTelegram, sendAnimatedText, editTelegramMessage, answerCallback, sendSupportToAdmin } from './telegram';
-import { isAdminSession, setAuthStateHelper, getAuthStateHelper, clearAuthState, getKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
-import { searchWebDeep } from './search';
+import { isAdminSession, setAuthStateHelper, getAuthStateHelper, clearAuthState, getKVHistory, appendKVHistory, getUserMemories, lookupUser, saveMemory } from './memory';
+import { searchWebDeep, cutAtSentence } from './search';
 import { checkRateLimit, RATE_LIMITS } from './tools';
 import { callGroq, getGroqStatus } from './brain';
 import { runHelpMenu, runAdminMenu, runAgentCommand, approveUser, denyUser, blockUser, getUserCardItem, startAdminRecover, clearAdminLocks } from './admin';
@@ -431,6 +431,34 @@ export async function handleCallback(env: Env, callbackQuery: any): Promise<void
   }
 }
 
+// "Friend who googles for you" — the deep-search briefing is composed by HER
+// persona brain (callGroq always carries BIZLI_PERSONA + CRITICAL_RULES) with
+// the user's language + recent chat context, so it reads like Bizli searched
+// it herself, not like a bolted-on report module. Shared by the !search
+// command and the /admin/test-chat deep probe — never inline-copy this prompt.
+export async function composeSearchBriefing(env: Env, query: string, raw: string, userId?: string): Promise<string> {
+  const langLock = `[🔐 LANGUAGE LOCK — the user's search query is in: ${detectScript(query)}. Write the ENTIRE briefing in that language.]`;
+  const userTz = userId ? await env.BIZLI_MEMORY.get(`tz_${userId}`).catch(() => null) : null;
+  const systemExtra = todayContext(userTz || undefined) + "\n" + langLock;
+  // Recent turns give her conversational continuity ("the thing you asked
+  // about earlier"); the session-gap system note is for greetings, not this.
+  const history = userId
+    ? (await getKVHistory(env, userId)).filter((m: any) => m.role !== "system").slice(-6).map((m: any) => ({ role: m.role, content: m.content }))
+    : [];
+  const prompt = `You just went and searched the live web for the user yourself — their query was "${query}" and YOUR findings are below, fetched right now (they BEAT your training memory). Now tell them what you found, as YOU — the friend who googled it for them:
+- Open with ONE natural line in your own voice: your take on what you found — connect the dots, flag anything surprising or doubtful.
+- Then 5-8 informative bullet points — a full fact per bullet, with names/numbers/dates where the data has them.
+- A one-line takeaway at the end.
+- Then 2-3 of the real source links from the data, each pasted as the COMPLETE URL exactly as it appears (never shortened to just a domain) — official/primary sources first.
+Complete sentences only — never stop mid-sentence. No filler, no invented facts or links. This is the ONE place your answers go long — detail is good here.
+
+LIVE RESULTS:
+${raw.slice(0, 4000)}`;
+  // maxTokens 2048: gpt-oss spends completion tokens on internal reasoning
+  // BEFORE writing — probes showed briefings truncating even at 1024.
+  return callGroq(env, [...history, { role: "user", content: prompt }], systemExtra, "", false, false, 2048);
+}
+
 // inPlace (set by the help menu's ▶ Run): render the command's result INSIDE
 // the menu message — its own buttons merged with the menu's Back/Main-Menu
 // rows. Typed commands (inPlace absent) send a fresh message as always.
@@ -676,8 +704,13 @@ export async function handleUserCommand(env: Env, chatId: string, text: string, 
     await sendTelegram(env, chatId, "searching deep... 🔍");
     const result = await searchWebDeep(env, query);
     if (result) {
-        const formatted = await callGroq(env, [{ role: "user", content: `Present these search results as a DETAILED briefing: 5-8 informative bullet points (a full fact per bullet, with names/numbers/dates where the data has them), a one-line takeaway at the end, then 2-3 of the real source links from the data exactly as shown — prefer official/primary sources (government, official sites, major outlets) first. Complete sentences only — never stop mid-sentence. No filler, no invented links.\n\nQuery: ${query}\n\nData:\n${result.slice(0, 4000)}` }], "");
-        await sendAnimatedText(env, chatId, formatted || result.slice(0, 1200));
+        const briefing = (await composeSearchBriefing(env, query, result, userId)) || result.slice(0, 1200);
+        await sendAnimatedText(env, chatId, briefing);
+        // One continuous mind: the search lands in her short-term memory so
+        // follow-up questions about it work like ChatGPT (was: sent to
+        // Telegram only — her brain had no idea she'd just searched).
+        await appendKVHistory(env, userId, "user", `[used !search: ${query}]`);
+        await appendKVHistory(env, userId, "assistant", cutAtSentence(briefing, 490));
     } else { await sendTelegram(env, chatId, "nothing found."); }
     return true;
   }

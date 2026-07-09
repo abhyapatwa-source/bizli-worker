@@ -51,6 +51,30 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.40.3 — RAW TOOL DUMP BANNED (live incident 2026-07-09/10: synthesis
+// 413'd on gpt-oss-120b across all 3 retry keys → the "⚡ LIVE WEB RESULTS"
+// grounding block reached a user verbatim): (1) all 4 synthesis-failure
+// fallbacks now send SYNTH_FAILED_REPLY (she asks — Abhya's rule) + log;
+// (2) synthesis retries switch MODEL on 413, not just key (size-based —
+// same model would 413 on every key); (3) briefing maxTokens 1024 → 2048
+// (gpt-oss reasoning tokens count against the completion cap — still
+// truncated at 1024); (4) TEMP per-source debug in the deep test hook
+// (Hindi deep search still empty — isolating Tavily vs Serper vs DDG).
+// v12.40.2 — deep-search probe fixes: (1) Serper fallback now fires on Tavily
+// EMPTY too, not just Tavily dead (Devanagari deep searches got "nothing
+// found" while Google had pages); (2) callGroq gained additive maxTokens
+// (default 512 unchanged) — briefings truncated mid-sentence because gpt-oss
+// spends completion tokens on internal reasoning; briefing call uses 1024;
+// (3) briefing prompt demands COMPLETE URLs (model was shortening to domains).
+// v12.40.1 — DEEP-SEARCH OVERHAUL ("friend who googles for you"):
+// (1) reliability — searchWebDeep no longer forces Tavily's news vertical
+//     (topic:"news" returned EMPTY for general queries — the intermittent
+//     !search failures); news headlines still ride the parallel RSS block;
+//     cache v9. (2) one continuous mind — the !search briefing now lands in
+//     KV history (user turn + trimmed assistant turn) so follow-ups work.
+// (3) her voice — briefing composed by composeSearchBriefing (commands.ts):
+//     persona brain + language lock + user tz + recent chat context, opens
+//     with her own take; shared by !search and the deep test probe.
 // v12.40.0 — SELF-IMPROVEMENT KIT: TEST_SUITE 5 → 12 probes (president search,
 // time verbatim, photo-not-unprompted, no-filler endings, hallucination bait,
 // creator probe, aap/tum — every July-2026 battery bug class, 6h cron);
@@ -95,7 +119,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.40.0";
+export const BIZLI_VERSION = "v12.40.3";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
@@ -705,6 +729,12 @@ function parsePythonArgs(s: string): Record<string, any> {
 // Fallback brains run WITHOUT tools — they must never pretend to call one.
 // Without this note they see the SEARCH-FIRST rule and emit fake syntax like
 // "call:searchweb{...}" straight to the user (caught in the v12.37.0 battery).
+// Raw tool results are INTERNAL grounding data (forcing headers, numbered
+// snippets, 📎 blocks) — dumping them leaked machine text to a user (live
+// transcript 2026-07-10). Abhya's rule: if she can't compose the answer,
+// she ASKS instead. Never silent, never robotic.
+const SYNTH_FAILED_REPLY = "okay I actually looked it up, but my thoughts got scrambled putting it into words 😵‍💫 ask me that once more?";
+
 const NO_TOOLS_NOTE = `
 
 [⚠️ TOOLS ARE OFFLINE for this reply: answer in plain conversational text from what you already know. NEVER output tool-call syntax of any kind (call:..., function=..., toolname{...}). If the question needs live data you can't check right now, say so warmly in one short line ("can't peek at the live stuff this second — ask me again in a bit?") and still be helpful from general knowledge without inventing specific current facts.]`;
@@ -897,7 +927,10 @@ Bizli: "${bizliReply}"`;
   } catch {}
 }
 
-export async function callGroq(env: Env, messages: any[], systemExtra = "", chatId = "", handleTools = false, userSentGif = false): Promise<string> {
+// maxTokens (additive, default unchanged): the !search briefing is the ONE
+// long-form reply — 512 starves it mid-sentence on models that also spend
+// completion tokens on internal reasoning (gpt-oss). Chat stays at 512.
+export async function callGroq(env: Env, messages: any[], systemExtra = "", chatId = "", handleTools = false, userSentGif = false, maxTokens = 512): Promise<string> {
   const keys = getGroqKeys(env);
   if (!keys.length) throw new Error("No Groq keys");
   const status = await getGroqStatus(env);
@@ -944,7 +977,7 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
           model: usedModel,
           messages: [{ role: "system", content: system }, ...messages],
           temperature: 0.75,
-          max_tokens: 512,
+          max_tokens: maxTokens,
         };
         if (handleTools && chatId) {
           body.tools = userSentGif ? BIZLI_TOOLS : BIZLI_TOOLS.filter((t: any) => t.function.name !== "send_gif");
@@ -1054,11 +1087,17 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
             ...toolMessages,
             { role: "system", content: "Answer the user now in plain conversational text using ONLY the tool results above. Do NOT call any tool again." },
           ];
+          // Synthesis model can differ from the tool-call model: a 413 here is
+          // SIZE-based (base prompt + tool results + tools schema outgrew the
+          // model's budget) — every key would 413 identically, so switch MODEL
+          // instead of key (live incident 2026-07-09: gpt-oss-120b synthesis
+          // 413 × 3 keys → raw tool dump reached a user).
+          let synthModel = usedModel;
           for (const sk of synthCandidates.slice(0, 3)) {
             const sRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys[sk]}` },
-              body: JSON.stringify({ model: usedModel, messages: synthMessages, tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
+              body: JSON.stringify({ model: synthModel, messages: synthMessages, tools: BIZLI_TOOLS, tool_choice: "none", temperature: 0.75, max_tokens: 512 }),
             });
             if (sRes.status === 429) {
               const retryAfterSec = sRes.headers.get("retry-after");
@@ -1068,6 +1107,13 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
               status.cooldowns[sk] = Date.now() + cooldownMs;
               statusDirty = true;
               appendError(env, `Groq synthesis key ${sk} 429: ${cooldownMs}ms cooldown`).catch(() => {});
+              continue;
+            }
+            if (sRes.status === 413) {
+              const next = modelsToTry.find((m: any) => m.id !== synthModel && !tooLargeModels.has(m.id) && !mhBenched(status, m.id));
+              appendError(env, `Groq synthesis 413 on ${synthModel} — ${next ? "retrying on " + next.id : "no smaller model left"}`).catch(() => {});
+              if (!next) break;
+              synthModel = next.id;
               continue;
             }
             if (!sRes.ok) {
@@ -1097,8 +1143,8 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
             }
             return cleanFinal;
           }
-          const toolResultFallback = toolMessages.filter((m: any) => m.role === "tool").map((m: any) => m.content).join("\n\n");
-          return sanitizePersonaLeaks(toolResultFallback || choice.message?.content || "");
+          appendError(env, `Groq synthesis failed after ${toolCalls.map((t: any) => t.function.name).join(",")} — sent ask-again (raw tool dump banned)`).catch(() => {});
+          return SYNTH_FAILED_REPLY;
         }
 
         const text = choice.message?.content || "";
@@ -1141,7 +1187,8 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
               return sanitizePersonaLeaks(finalText.trim());
             }
           }
-          return sanitizePersonaLeaks(result);
+          appendError(env, `Groq synthesis failed after ${toolName} (legacy syntax path) — sent ask-again (raw tool dump banned)`).catch(() => {});
+          return SYNTH_FAILED_REPLY;
         }
 
         const toolNameSet = new Set(BIZLI_TOOLS.map((t: any) => t.function.name));
@@ -1180,7 +1227,8 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
               return sanitizePersonaLeaks(finalText.trim());
             }
           }
-          return sanitizePersonaLeaks(result);
+          appendError(env, `Groq synthesis failed after ${toolName} (legacy syntax path) — sent ask-again (raw tool dump banned)`).catch(() => {});
+          return SYNTH_FAILED_REPLY;
         }
 
         const fusedMatch = (!fnMatch && !pyMatch)
@@ -1221,7 +1269,8 @@ export async function callGroq(env: Env, messages: any[], systemExtra = "", chat
               return sanitizePersonaLeaks(finalText.trim());
             }
           }
-          return sanitizePersonaLeaks(result);
+          appendError(env, `Groq synthesis failed after ${toolName} (legacy syntax path) — sent ask-again (raw tool dump banned)`).catch(() => {});
+          return SYNTH_FAILED_REPLY;
         }
 
         await saveGroqStatus(env, status);

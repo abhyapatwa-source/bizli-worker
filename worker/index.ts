@@ -41,9 +41,9 @@ import { callGroq, callCerebras, callOpenRouter, callCloudflareAI, autoExtractMe
 import { checkRateLimit } from './tools';
 import { runAgents } from './agents';
 import { handleAdmin } from './admin';
-import { detectIntent, handleUserCommand, handleCallback, sendForgotPinRequest, sendSupportPrompt } from './commands';
+import { detectIntent, handleUserCommand, handleCallback, sendForgotPinRequest, sendSupportPrompt, composeSearchBriefing } from './commands';
 import { handleAuth, startRecoverFlow } from './auth';
-import { searchWebDeep } from './search';
+import { searchWebDeep, tavilySearch, serperSearch } from './search';
 import { handleGroupMessage } from './group';
 import { handleAdminStats, handleDashboard, handleWebChat } from './stats';
 import { handleLabAgent } from './lab';
@@ -101,13 +101,22 @@ export default {
       const t0 = Date.now();
 
       // TEMP: body.deep = true → exercises the exact !search pipeline
-      // (searchWebDeep + the same formatting callGroq) with timing breakdown.
+      // (searchWebDeep + the shared composeSearchBriefing) with timing breakdown.
       if (body.deep) {
         const raw = await searchWebDeep(env, text);
         const searchMs = Date.now() - t0;
-        if (!raw) return J({ ok: true, path: "deep", found: false, searchMs, ms: Date.now() - t0 });
+        if (!raw) {
+          // TEMP debug (like the whole route): when deep search finds nothing,
+          // probe each source directly so the dead link names itself.
+          const tv = await tavilySearch(env, { query: text, max_results: 4, search_depth: "basic", include_answer: true }, 5000, 6000);
+          const sp = await serperSearch(env, text, false);
+          return J({ ok: true, path: "deep", found: false, searchMs, debug: {
+            tavily: tv ? { answer: !!tv.answer, results: Array.isArray(tv.results) ? tv.results.length : -1 } : null,
+            serper: sp ? { answer: !!sp.answer, results: sp.results.length } : null,
+          }, ms: Date.now() - t0 });
+        }
         const t2 = Date.now();
-        const formatted = await callGroq(env, [{ role: "user", content: `Present these search results as a DETAILED briefing: 5-8 informative bullet points (a full fact per bullet, with names/numbers/dates where the data has them), a one-line takeaway at the end, then 2-3 of the real source links from the data exactly as shown — prefer official/primary sources (government, official sites, major outlets) first. Complete sentences only — never stop mid-sentence. No filler, no invented links.\n\nQuery: ${text}\n\nData:\n${raw.slice(0, 4000)}` }], "");
+        const formatted = await composeSearchBriefing(env, text, raw);
         return J({ ok: true, path: "deep", found: true, searchMs, formatMs: Date.now() - t2, rawLen: raw.length, formattedLen: (formatted || "").length, formatted, ms: Date.now() - t0 });
       }
 

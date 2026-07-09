@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { fetchTimeout } from './utils';
 
 // Bump this whenever search output format changes — stale cached results auto-invalidate.
-export const SEARCH_CACHE_VERSION = "v8";
+export const SEARCH_CACHE_VERSION = "v9";
 
 // ALL keyword layers are DEAD (brain-first): no office-holder regex, no
 // time-sensitivity word lists, no India detection, no year-appending. The
@@ -16,7 +16,7 @@ function domainOf(url: string): string {
 }
 
 // Cut at the last sentence end within max chars — never mid-sentence.
-function cutAtSentence(text: string, max: number): string {
+export function cutAtSentence(text: string, max: number): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;
   const slice = t.slice(0, max);
@@ -158,7 +158,11 @@ export async function readUrl(url: string): Promise<string> {
 
 // ————— the search pipeline —————
 
-interface SearchOpts { depth: "basic" | "advanced"; maxResults: number; news: boolean; maxSnippets: number; perSnippet: number; timeoutMs: number; budgetMs?: number }
+// `news` = fetch Google News RSS headlines in parallel (harmless for general
+// queries — the relevance gate drops off-topic blocks). `newsTopic` = restrict
+// the search INDEX to news verticals (Tavily topic:"news", Serper past-week
+// filter) — only safe when the query is actually news, else results go empty.
+interface SearchOpts { depth: "basic" | "advanced"; maxResults: number; news: boolean; newsTopic?: boolean; maxSnippets: number; perSnippet: number; timeoutMs: number; budgetMs?: number }
 
 async function runSearch(env: Env, query: string, opts: SearchOpts): Promise<string> {
   // News headlines fetched in parallel (never sequential — latency matters)
@@ -170,15 +174,19 @@ async function runSearch(env: Env, query: string, opts: SearchOpts): Promise<str
     max_results: opts.maxResults,
     search_depth: opts.depth,
     include_answer: true,
-    ...(opts.news ? { topic: "news" } : {}),
+    ...(opts.newsTopic ? { topic: "news" } : {}),
   }, opts.timeoutMs, opts.budgetMs);
   if (tv) {
     answer = tv.answer || "";
     results = (Array.isArray(tv.results) ? tv.results : []).map((r: any) => ({
       title: r.title || "", content: r.content || "", url: r.url || "",
     }));
-  } else {
-    const sp = await serperSearch(env, query, opts.news);
+  }
+  // Serper (Google) fallback runs on Tavily EMPTY too, not just Tavily dead —
+  // Tavily 200s with zero results on many non-English queries (Devanagari
+  // deep searches were returning "nothing found" while Google had pages).
+  if (!answer && !results.length) {
+    const sp = await serperSearch(env, query, !!opts.newsTopic);
     if (sp) { answer = sp.answer; results = sp.results; }
   }
   const newsBlock = await newsPromise;
@@ -203,7 +211,7 @@ export async function searchWeb(env: Env, query: string, topic?: string): Promis
   const cached = await env.BIZLI_MEMORY.get(cacheKey);
   if (cached) return cached;
   const result = await runSearch(env, query, {
-    depth: "basic", maxResults: 5, news, maxSnippets: 4, perSnippet: 280, timeoutMs: 3500, budgetMs: 5000,
+    depth: "basic", maxResults: 5, news, newsTopic: news, maxSnippets: 4, perSnippet: 280, timeoutMs: 3500, budgetMs: 5000,
   });
   if (result) {
     await env.BIZLI_MEMORY.put(cacheKey, result, { expirationTtl: news ? 600 : 3600 }).catch(() => {});
@@ -218,8 +226,12 @@ export async function searchWebDeep(env: Env, query: string): Promise<string> {
   const cacheKey = `searchd_cache_${SEARCH_CACHE_VERSION}_${query.toLowerCase().trim().replace(/\s+/g, "_").slice(0, 90)}`;
   const cached = await env.BIZLI_MEMORY.get(cacheKey);
   if (cached) return cached;
+  // newsTopic stays OFF: !search takes ANY query (recipes, history, how-tos) —
+  // forcing Tavily's news vertical returned empty for general topics (the
+  // "intermittent !search failures" of 2026-07-08). News queries still get
+  // headlines via the parallel RSS block.
   const result = await runSearch(env, query, {
-    depth: "advanced", maxResults: 8, news: true, maxSnippets: 8, perSnippet: 450, timeoutMs: 5000, budgetMs: 9000,
+    depth: "advanced", maxResults: 8, news: true, newsTopic: false, maxSnippets: 8, perSnippet: 450, timeoutMs: 5000, budgetMs: 9000,
   });
   if (result) {
     await env.BIZLI_MEMORY.put(cacheKey, result, { expirationTtl: 900 }).catch(() => {});
