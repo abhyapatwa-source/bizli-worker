@@ -178,7 +178,9 @@ export async function handleAuth(env: Env, chatId: string, text: string, platfor
       return { handled: true };
     }
     await clearStuck("reg_gmail");
-    const existing = await db(env, `users?gmail=eq.${gmail}&limit=1`);
+    // encodeURIComponent: user-typed values must never reach PostgREST raw —
+    // "+" aliases became spaces and ,/() characters break the filter syntax.
+    const existing = await db(env, `users?gmail=eq.${encodeURIComponent(gmail)}&limit=1`);
     if (existing?.[0]) {
       await clearAuthState(env, chatId);
       const u = existing[0];
@@ -277,7 +279,7 @@ export async function handleAuth(env: Env, chatId: string, text: string, platfor
 
   if (state?.step === "login_code") {
     const code = trimmed.toUpperCase();
-    const users = await db(env, `users?identity_code=eq.${code}&limit=1`);
+    const users = await db(env, `users?identity_code=eq.${encodeURIComponent(code)}&limit=1`);
     if (!users?.length) {
       await sendTelegram(env, chatId, "hmm that code isn't ringing a bell 🤔\n\ndouble-check it looks like BZ-XXXX (4 chars after BZ-) and try again, or:",
         { reply_markup: { inline_keyboard: [
@@ -335,7 +337,7 @@ export async function handleAuth(env: Env, chatId: string, text: string, platfor
 
   if (state?.step === "recover_gmail") {
     const gmail = trimmed.toLowerCase().trim();
-    const users = await db(env, `users?gmail=eq.${gmail}&limit=1`);
+    const users = await db(env, `users?gmail=eq.${encodeURIComponent(gmail)}&limit=1`);
     if (!users?.length) {
       if (await checkStuck("recover_gmail")) return { handled: true };
       await sendTelegram(env, chatId,

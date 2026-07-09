@@ -1,9 +1,9 @@
 import type { Env } from './types';
 import { db } from './db';
-import { getGroqKeys, getUserLocalHour, MORNING_MSGS, NIGHT_MSGS } from './utils';
+import { getGroqKeys, getUserLocalHour, MORNING_MSGS, NIGHT_MSGS, fetchTimeout } from './utils';
 import { sendTelegram } from './telegram';
 import { getGroqStatus, probeAllProviders } from './brain';
-import { runBizliTests, runIdeaReport } from './tests';
+import { runIdeaReport } from './tests';
 
 function pickProactiveMessage(name: string, localHour: number): string {
   const first = name.split(" ")[0];
@@ -66,8 +66,11 @@ async function sendProactiveNudges(env: Env): Promise<void> {
     const userTz = (await env.BIZLI_MEMORY.get(`tz_${identity.user_id}`)) || "Asia/Kolkata";
     const localHour = parseInt(new Date().toLocaleTimeString("en-US", { timeZone: userTz, hour: "2-digit", hour12: false }));
     if (localHour >= 23 || localHour < 6) continue;
+    // Morning/night greetings own hours 8 and 22 — a nudge in the same hour
+    // would double-ping the user within minutes.
+    if (localHour === 8 || localHour === 22) continue;
 
-    const msg = pickProactiveMessage(user.display_name || "hey", localHour);
+    const msg = pickProactiveMessage(user.display_name || "friend", localHour);
     await sendTelegram(env, identity.platform_id, msg).catch(() => {});
     await env.BIZLI_MEMORY.put(`proactive_${identity.user_id}`, String(now), { expirationTtl: 19800 });
     await new Promise(r => setTimeout(r, 150));
@@ -172,13 +175,15 @@ export async function runAgents(env: Env): Promise<void> {
       }
     }
 
-    // Run quality tests every 6h — alerts if pass rate drops below 60%
-    const { run, passed } = await runBizliTests(env);
-    if (run > 0 && passed / run < 0.6) {
-      await sendTelegram(env, env.ADMIN_CHAT_ID,
-        `⚠️ Bizli Quality Alert: ${passed}/${run} tests passed (${Math.round(passed/run*100)}%) — check dashboard Tests tab`
-      ).catch(() => {});
-    }
+    // Run quality tests every 6h — via SELF-FETCH so the battery gets its own
+    // invocation with a FRESH subrequest budget. Inline, it shared this cron
+    // invocation's budget with nudges/greetings/probes and blew Cloudflare's
+    // per-invocation cap (live 2026-07-09: "Too many subrequests" mid-battery).
+    // The 6h gate + <60% alert both live inside runBizliTests/the route.
+    await fetchTimeout(
+      `https://bizli-worker.bizlibix.workers.dev/admin/run-tests?key=${env.ADMIN_PASSWORD}`,
+      {}, 180_000
+    ).catch(() => {});
 
     const lastReport = await env.BIZLI_MEMORY.get("last_daily_report");
     if (!lastReport || now - parseInt(lastReport) > 86400000) {

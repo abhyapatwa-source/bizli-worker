@@ -51,6 +51,15 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.40.5 — INFRASTRUCTURE HARDENING (stability sessions, 2026-07-10):
+// (1) cron battery runs via SELF-FETCH to /admin/run-tests — its own
+//     invocation, fresh subrequest budget (was sharing the cron invocation's
+//     cap with nudges/greetings/probes); <60% alert moved into runBizliTests;
+// (2) PostgREST input hardening — user-typed gmail/identity-code values are
+//     encodeURIComponent'd before entering filter URLs (auth.ts, stats.ts);
+// (3) nudges: no double-ping in greeting hours (8/22), fallback name "friend"
+//     (was literally "good morning hey"); (4) dashboard pre-probe vision
+//     default = llama-4-scout (dead 3.2-preview was displayed).
 // v12.40.4 — FULL-CODEBASE SWEEP FIXES (2026-07-10 audit of every worker file):
 // (1) send_my_photo CODE cooldown — 24h per-user KV flag in executeTool
 //     (prompt rules failed twice; model still decides WHEN, code caps
@@ -132,7 +141,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.40.4";
+export const BIZLI_VERSION = "v12.40.5";
 
 export const RPM_COOLDOWN_MS = 60_000;
 

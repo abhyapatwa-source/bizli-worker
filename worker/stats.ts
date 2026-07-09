@@ -121,7 +121,7 @@ export async function handleAdminStats(request: Request, env: Env): Promise<Resp
   };
 
   let groqLiveText: string[] = [];
-  let groqLiveVision = "llama-3.2-90b-vision-preview";
+  let groqLiveVision = "meta-llama/llama-4-scout-17b-16e-instruct"; // pre-probe default = the live model, not the dead 3.2 preview
   try {
     if (groqLiveRaw) {
       const p = JSON.parse(groqLiveRaw);
@@ -179,7 +179,7 @@ export async function handleWebChat(request: Request, env: Env): Promise<Respons
     const pin = String(body.pin || "").trim();
     if (!code || !pin) return R({ ok: false, error: "Code and PIN required" });
 
-    const users = await db(env, `users?identity_code=eq.${code}&limit=1`);
+    const users = await db(env, `users?identity_code=eq.${encodeURIComponent(code)}&limit=1`);
     if (!users?.length) return R({ ok: false, error: "Code not found — check it looks like BZ-XXXX" });
     const user = users[0];
     if (user.status === "waitlist") return R({ ok: false, error: "You're on the waitlist ⏳ hang tight!" });

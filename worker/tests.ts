@@ -202,6 +202,13 @@ export async function runBizliTests(env: Env): Promise<{ run: number; passed: nu
     } catch {}
     await new Promise(r => setTimeout(r, 600));
   }
+  // Quality alert lives HERE (not in agents.ts) so it fires no matter which
+  // invocation ran the battery — the cron now triggers tests via self-fetch.
+  if (run > 0 && passed / run < 0.6) {
+    await sendTelegram(env, env.ADMIN_CHAT_ID,
+      `⚠️ Bizli Quality Alert: ${passed}/${run} tests passed (${Math.round(passed / run * 100)}%) — check dashboard Tests tab`
+    ).catch(() => {});
+  }
   return { run, passed };
 }
 
