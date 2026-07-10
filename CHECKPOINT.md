@@ -770,7 +770,28 @@ All work was on the monitoring room (dashboard UI). Deploys were incremental.
 ### Bugs / notes discovered
 - Full-height-tabs (v12.24) approach broke the room — reverted. Root cause suspected: forcing ~100vh min-height on panels + grid interaction.
 - #app had no initial tab class (fixed then reverted with the batch) — a real latent issue if switchTab ever fails.
+---
+## BUG LIST — collected 2026-07-10 (raw, not yet triaged)
 
+Reported by Abhya via Telegram, needs proper investigation when back in development:
+
+- Bizli's internal agent broke (2026-07-09)
+- Voice replies coming late
+- Profile picture tool reads photo but not other details, AND incorrectly stays "stuck" on the photo topic even after user changes subject
+- Language bug — possibly caused by fallback model (not primary) breaking persona/language rules
+- Daily self-improvement report — unclear where it actually goes / is it being delivered?
+- Thumbs up/down feedback buttons not appearing for users
+- /vault missing from menu card
+- Dashboard stats not updating in real time
+- Old/stale stats and data should auto-delete; only keep rare/instructive cases in Supabase for training, auto-remove once Bizli "masters" that case
+- CM of West Bengal test case: model gave a correct-sounding but unverified/possibly wrong answer with citations that don't clearly support it — needs fact-check + look at how "currently" follow-ups are handled
+- Some models in the rotation appear to ignore persona/behavior rules that others follow
+- Bizli doesn't read GIF/sticker vibe/emotion — should match the tone of what user sends
+- Chat history limit: increase from 15 to ~30 recent messages (ChatGPT-style)
+- Supabase security needs review
+- Storage approaching capacity — evaluate additional free-tier storage options
+
+Priority/root-cause triage: NOT YET DONE. Do this properly with a clear head, not end-of-session.
 ---
 
 Last updated: 2026-07-02 by Claude Code
