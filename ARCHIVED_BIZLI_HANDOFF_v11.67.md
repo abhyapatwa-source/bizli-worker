@@ -1,3 +1,5 @@
+ 
+# ARCHIVED - superseded by CLAUDE.md and CHECKPOINT.md. Kept for historical reference only. 
 # BIZLI AI — COMPLETE PROJECT HANDOFF
 ### For continuing development in Claude Code (or any new session)
 ### Current version: v11.67.0 — DEPLOYED & ALIVE (running on Gemini fallback while Groq daily quota resets)

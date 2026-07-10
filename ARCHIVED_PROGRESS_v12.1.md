@@ -1,3 +1,5 @@
+ 
+# ARCHIVED - superseded by CLAUDE.md and CHECKPOINT.md. Kept for historical reference only. 
 # BIZLI PROGRESS — Session Continuity File
 # Read this first every new session. Update before ending.
 
