@@ -310,7 +310,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   function showChat(name){
     ls.style.display='none';
     cs.style.display='flex';
-    var g=name?('hey '+name+'! so good to see you 💰'):('hey! great to see you 💰');
+    var g=name?('hey '+name+'! so good to see you 💛'):('hey! great to see you 💛');
     addBiz(g);
     im.focus();
   }
@@ -353,7 +353,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
       else if(d.error&&d.error.indexOf('Session expired')>=0){
         TOKEN=null;cs.style.display='none';ls.style.display='flex';
         le.textContent='Session expired — please log in again';
-      } else {addBiz('oops, something went sideways 😅 try again in a sec!');}
+      } else if(d.error){addBiz(d.error);} /* real reason (maintenance, limits, access) — never swallow it */
+      else {addBiz('oops, something went sideways 😅 try again in a sec!');}
     })
     .catch(function(){
       hideTy();sb.disabled=false;im.focus();

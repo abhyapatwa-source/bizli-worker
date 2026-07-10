@@ -51,6 +51,12 @@ import { saveMemory } from './memory';
 // llama-3.1-8b) dropped from Groq pool (system prompt 413s them); fallback
 // brains get a NO_TOOLS note + sanitizer strips fake "call:" syntax; fallback
 // cascade skips empty-after-sanitize replies; test-rig image fetch UA header.
+// v12.41.1 — WEBCHAT AUDIT FIXES: (1) post-login greeting had 💰 (money bag!)
+// instead of 💛; (2) the chat error branch swallowed real backend messages
+// (maintenance notice, search limits, access denied) behind a generic "oops"
+// — d.error now shown to the user (Session-expired handling unchanged).
+// Backend handleWebChat audited: session TTL, PIN lock, maintenance gate,
+// never-silent, tool degradation (UUID chatId → honest fallbacks) all sound.
 // v12.41.0 — GAMES + /privacy + PROFILE-PHOTO TOOL (feature completion batch):
 // (1) GAMES 🎮 — 6 brain-hosted chat games (20Q she-guesses, Word Chain,
 //     Trivia, Emoji Movie, Riddles, Would You Rather): !games//games menu w/
@@ -159,7 +165,7 @@ import { saveMemory } from './memory';
 // v12.38.1 — battery fixes: search forcing header restored (president-from-
 // training regression), index symbol normalization (^NSEI etc.), no tool-use
 // narration/deflection rule, bullet+link format nudge, cache v8.
-export const BIZLI_VERSION = "v12.41.0";
+export const BIZLI_VERSION = "v12.41.1";
 
 export const RPM_COOLDOWN_MS = 60_000;
 
