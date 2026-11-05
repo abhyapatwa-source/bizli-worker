@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bizli Worker — Detailed Technical Documentation</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #101827;
+      --panel-2: #0f172a;
+      --line: #24324a;
+      --text: #e5edf8;
+      --muted: #9fb1c8;
+      --accent: #6ee7f9;
+      --accent-2: #a78bfa;
+      --green: #86efac;
+      --orange: #fbbf24;
+      --red: #fca5a5;
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #09111d 0%, #0e1729 100%);
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    .page {
+      max-width: 1100px;
+      margin: 32px auto 80px;
+      background: rgba(16, 24, 39, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 18px 45px var(--shadow);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, rgba(110, 231, 249, 0.1), rgba(167, 139, 250, 0.18));
+      border-bottom: 1px solid var(--line);
+      padding: 32px 40px 28px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 2.4rem;
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.01rem;
+    }
+
+    .section {
+      padding: 28px 40px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section:last-child { border-bottom: none; }
+
+    h2 {
+      font-size: 1.55rem;
+      margin: 0 0 16px;
+      color: var(--accent);
+      border-bottom: 1px solid rgba(110, 231, 249, 0.25);
+      padding-bottom: 8px;
+    }
+
+    h3 {
+      margin: 18px 0 10px;
+      font-size: 1.15rem;
+      color: #dfe9fe;
+    }
+
+    p, li {
+      color: var(--text);
+      font-size: 0.98rem;
+    }
+
+    ul, ol {
+      margin-top: 8px;
+      margin-bottom: 12px;
+      padding-left: 24px;
+    }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    code {
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      margin: 12px 0 18px;
+      color: #dff6ff;
+    }
+
+    .toc {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-top: 10px;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover { text-decoration: underline; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .callout {
+      background: rgba(110, 231, 249, 0.05);
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 12px 0 18px;
+    }
+
+    .warning {
+      background: rgba(251, 191, 36, 0.06);
+      border-left: 3px solid var(--orange);
+    }
+
+    .danger {
+      background: rgba(252, 165, 165, 0.06);
+      border-left: 3px solid var(--red);
+    }
+
+    .mini {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 760px) {
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .header, .section {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+      }
+
+      .page {
+        max-width: none;
+        margin: 0;
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <h1>Bizli Worker</h1>
+      <p class="subtitle">Detailed technical documentation for the Cloudflare Worker AI companion</p>
+    </div>
+
+    <div class="section">
+      <h2>Table of contents</h2>
+      <div class="toc">
+        <ul>
+          <li><a href="#overview">1. Overview</a></li>
+          <li><a href="#architecture">2. Architecture</a></li>
+          <li><a href="#runtime">3. Runtime and request flow</a></li>
+          <li><a href="#entry">4. Entry point: worker/index.ts</a></li>
+          <li><a href="#types">5. Env and config contract</a></li>
+          <li><a href="#db">6. Data layer</a></li>
+          <li><a href="#memory">7. Memory and session management</a></li>
+          <li><a href="#brain">8. Brain / LLM orchestration</a></li>
+          <li><a href="#tools">9. Tools and tool execution</a></li>
+          <li><a href="#apis">10. API integrations</a></li>
+          <li><a href="#search">11. Search and deep research</a></li>
+          <li><a href="#auth">12. Authentication, onboarding, and recovery</a></li>
+          <li><a href="#commands">13. Commands and Telegram callback flows</a></li>
+          <li><a href="#admin">14. Admin and monitoring</a></li>
+          <li><a href="#dashboard">15. Dashboard internals</a></li>
+          <li><a href="#agents">16. Agents, tests, and maintenance jobs</a></li>
+          <li><a href="#dataflow">17. End-to-end message flow</a></li>
+          <li><a href="#security">18. Security and trust model</a></li>
+          <li><a href="#applying">19. Contributing and extending the app</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="overview" class="section">
+      <h2>1. Overview</h2>
+      <p>
+        <strong>Bizli Worker</strong> is a Cloudflare Worker-based AI assistant platform with a Telegram bot front end, a web chat interface, a memory system, tool usage, a production monitoring dashboard, and a structured admin control plane.
+      </p>
+      <p>
+        At a high level, the worker is a full application runtime that combines:
+      </p>
+      <ul>
+        <li>Telegram webhook processing</li>
+        <li>web chat login and conversational exchange</li>
+        <li>user identity and access control</li>
+        <li>Supabase relational storage</li>
+        <li>Cloudflare KV fast state storage</li>
+        <li>LLM orchestration (primarily Groq) with fallback providers</li>
+        <li>tool execution for weather, search, movies, crypto, currency, and more</li>
+        <li>admin dashboard + stats backend</li>
+        <li>scheduled jobs and product QA tests</li>
+      </ul>
+
+      <div class="callout">
+        The app acts like an AI companion product, not just a chatbot. It includes persona shaping, memory behavior, thoughtful prompts, provider management, and even a monitoring “lab” for system health.
+      </div>
+
+      <h3>Repo structure at a glance</h3>
+      <pre>
+worker/
+  index.ts              // worker entry point and Telegram/web routes
+  brain.ts              // LLM orchestration, safety, provider fallback
+  tools.ts              // tool definitions and execution
+  commands.ts           // user commands and callback flows
+  auth.ts               // registration/login/recovery flows
+  memory.ts             // KV + memory retrieval + auth state helpers
+  db.ts                 // Supabase wrapper
+  apis.ts               // weather/stock/crypto/movie API helpers
+  search.ts             // live web search/deep briefing logic
+  admin.ts              // admin operations and sessions
+  stats.ts              // dashboard backend + web-chat backend
+  html.ts               // dashboard/HTML assembly
+  dashboard/            // UI panels and styles
+  agents.ts             // scheduled background agents
+  tests.ts              // test suite and scoring
+  lab.ts                // diagnostics and lab agent logic
+  quota.ts              // quota tracking for lab tasks
+</pre>
+    </div>
+
+    <div id="architecture" class="section">
+      <h2>2. Architecture</h2>
+      <p>The architecture is layered and intentionally modular. The application is built around a central runtime pattern:</p>
+      <ul>
+        <li><strong>Runtime entry</strong>: Cloudflare Worker receives HTTP and webhook traffic.</li>
+        <li><strong>Intent routing</strong>: Telegram or web messages are normalized and routed into command/auth/chat systems.</li>
+        <li><strong>Memory layer</strong>: user state and recent context are loaded from KV and Supabase.</li>
+        <li><strong>Brain layer</strong>: a model receives the user message plus system context.</li>
+        <li><strong>Tool layer</strong>: when the model calls tools, the worker executes them.</li>
+        <li><strong>Safety/sanitization layer</strong>: outputs are filtered before sending to the user.</li>
+        <li><strong>Storage layer</strong>: user messages and assistant output go into storage.</li>
+      </ul>
+
+      <div class="two-col">
+        <div>
+          <h3>Main responsibilities</h3>
+          <ul>
+            <li>Authentication and PIN flows</li>
+            <li>Memory recall and persisted chat history</li>
+            <li>LLM provider selection and fallback</li>
+            <li>Long prompts, tool calls, and integrations</li>
+            <li>System monitoring and dashboard</li>
+            <li>Scheduled agents + tests</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Primary external dependencies</h3>
+          <ul>
+            <li>Telegram Bot API</li>
+            <li>Supabase</li>
+            <li>Cloudflare KV</li>
+            <li>Groq</li>
+            <li>Gemini / OpenRouter / Cerebras alternatives</li>
+            <li>TMDB, Open-Meteo, Yahoo Finance, CryptoCompare, Tavily/Serper</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="runtime" class="section">
+      <h2>3. Runtime and request flow</h2>
+      <p>The worker receives both HTTP requests and scheduled tasks. For live chat, the flow is usually:</p>
+      <ol>
+        <li>Request enters Cloudflare Worker</li>
+        <li>Route is identified in <code>worker/index.ts</code></li>
+        <li>Message is translated into a normalized internal request</li>
+        <li>Auth, maintenance and access checks are performed</li>
+        <li>Relevant memory/context is loaded</li>
+        <li>LLM call is made to the provider</li>
+        <li>Tool calls are executed if needed</li>
+        <li>Final response is sanitized and sent to user</li>
+        <li>Conversation is saved to the relevant storage layer</li>
+      </ol>
+
+      <pre>
+Telegram Update
+  ↓
+worker/index.ts
+  ↓
+processTelegramUpdate()
+  ↓
+auth / admin / chat routing
+  ↓
+load user + context + memories
+  ↓
+callGroq() → maybe executeTool()
+  ↓
+sanitizePersonaLeaks()
+  ↓
+reply to Telegram / persist data</pre>
+
+      <div class="callout warning">
+        The most important architectural pattern here is <strong>context assembly before inference</strong>. The worker loads a user profile, current chat state, memory retrieval, and system instructions before sending data to the model.
+      </div>
+    </div>
+
+    <div id="entry" class="section">
+      <h2>4. Entry point: worker/index.ts</h2>
+      <p>The worker entry file is the operational nucleus of the project.</p>
+      <h3>Purpose</h3>
+      <ul>
+        <li>handle the main Cloudflare fetch lifecycle</li>
+        <li>serve web pages and API routes</li>
+        <li>accept Telegram webhooks</li>
+        <li>handle admin endpoints</li>
+        <li>handle scheduled jobs</li>
+        <li>invoke the correct internal module depending on the request kind</li>
+      </ul>
+
+      <h3>Route examples</h3>
+      <pre>
+GET /dashboard
+GET /admin/stats?key=...
+POST /web-chat
+POST /telegram
+GET /privacy
+GET /terms
+GET /health
+POST /admin/test-chat
+GET /admin/run-tests
+</pre>
+
+      <h3>Telegram processing</h3>
+      <p>In the Telegram path, the worker will often call logic such as:</p>
+      <ul>
+        <li>auth flow handlers</li>
+        <li>user command handlers</li>
+        <li>group message handlers</li>
+        <li>admin command handlers</li>
+        <li>maintenance gate checks</li>
+        <li>support handling</li>
+      </ul>
+
+      <p>The code ensures that when a normal user message is received, it does not immediately assume the message is “just chat.” It checks whether the message is:</p>
+      <ul>
+        <li>a command</li>
+        <li>part of auth wizard state</li>
+        <li>admin intent</li>
+        <li>a callback response</li>
+        <li>a group message</li>
+      </ul>
+
+      <div class="callout">
+        This is one of the design strengths of the repo: <strong>message routing is purpose-aware</strong>, not just “send every message into the brain.”
+      </div>
+    </div>
+
+    <div id="types" class="section">
+      <h2>5. Env and config contract</h2>
+      <p><code>worker/types.ts</code> defines the application’s runtime environment contract using the <code>Env</code> interface.</p>
+      <pre>
+export interface Env {
+  TELEGRAM_BOT_TOKEN: string;
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_KEY: string;
+  GROQ_API_KEY_1: string; GROQ_API_KEY_2: string; ...
+  BIZLI_PERSONA: string;
+  BIZLI_MEMORY: KVNamespace;
+  ADMIN_CHAT_ID: string;
+  ADMIN_PASSWORD: string;
+  NASA_API_KEY: string;
+  TAVILY_API_KEY: string;
+  TMDB_API_KEY: string;
+  AI: any;
+  OPENROUTER_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  CEREBRAS_API_KEY_1?: string;
+  ...
+}
+</pre>
+
+      <h3>Why this matters</h3>
+      <ul>
+        <li>It defines the exact secret structure the worker expects.</li>
+        <li>It makes feature toggling possible by binding only the keys that exist.</li>
+        <li>It is a safe source of truth for provider logic and runtime assumptions.</li>
+      </ul>
+    </div>
+
+    <div id="db" class="section">
+      <h2>6. Data layer</h2>
+      <h3>Supabase wrapper</h3>
+      <p><code>worker/db.ts</code> wraps PostgREST calls to Supabase:</p>
+      <pre>
+export async function db(env: Env, path: string, method = "GET", body?: object)
+</pre>
+      <p>It:</p>
+      <ul>
+        <li>builds a REST URL</li>
+        <li>authenticates with the service key</li>
+        <li>sends JSON payloads when needed</li>
+        <li>returns parsed JSON or null</li>
+      </ul>
+
+      <h3>Typical database usage</h3>
+      <p>Common entities are:</p>
+      <ul>
+        <li><code>users</code></li>
+        <li><code>messages</code></li>
+        <li><code>memories</code></li>
+        <li><code>feedback</code></li>
+        <li><code>platform_identities</code></li>
+      </ul>
+
+      <div class="callout">
+        The DB layer is intentionally thin, which is a good design decision: the rest of the app does not hardcode Supabase APIs everywhere.
+      </div>
+    </div>
+
+    <div id="memory" class="section">
+      <h2>7. Memory and session management</h2>
+      <p><code>worker/memory.ts</code> is where the app manages short-term memory, long-term facts, and conversational state.</p>
+
+      <h3>KV-based session memory</h3>
+      <p>Cloudflare KV is used for fast state that can be stored cheaply and retrieved quickly.</p>
+      <ul>
+        <li>chat history</li>
+        <li>timezone</li>
+        <li>language</li>
+        <li>maintenance flags</li>
+        <li>auth state</li>
+        <li>cooldowns / rate limits</li>
+        <li>admin session state</li>
+      </ul>
+
+      <h3>Long-term memory</h3>
+      <p>Long-term memory is not simply raw chat text. The app also stores structured facts and often generates embeddings for retrieval/search.</p>
+      <ul>
+        <li><code>saveMemory()</code> stores a user fact</li>
+        <li><code>getRelevantMemories()</code> retrieves relevant memory based on context</li>
+        <li><code>getUserMemories()</code> gives a user’s saved memory list</li>
+      </ul>
+
+      <h3>Helpful state helpers</h3>
+      <pre>
+setAuthStateHelper(env, chatId, { step, userId, ... })
+getAuthStateHelper(env, chatId)
+clearAuthState(env, chatId)
+</pre>
+      <p>These are used for guided login, account recovery, and input waits.</p>
+
+      <div class="callout warning">
+        The code strongly distinguishes between <strong>short-term conversational memory</strong> and <strong>persistent user memory</strong>. That separation is a product-quality design decision.
+      </div>
+    </div>
+
+    <div id="brain" class="section">
+      <h2>8. Brain / LLM orchestration</h2>
+      <p><code>worker/brain.ts</code> is the AI core of the application.</p>
+
+      <h3>Main purpose</h3>
+      <ul>
+        <li>select the active AI model/provider</li>
+        <li>build prompt context</li>
+        <li>track cooldowns and provider health</li>
+        <li>route tool calls</li>
+        <li>sanitize output before user delivery</li>
+      </ul>
+
+      <h3>Provider strategy</h3>
+      <p>The app does not rely on a single model. It supports a fallback chain:</p>
+      <ul>
+        <li>Groq</li>
+        <li>Gemini</li>
+        <li>Cerebras</li>
+        <li>OpenRouter</li>
+        <li>Cloudflare AI / other AI endpoints</li>
+      </ul>
+
+      <h3>Cool-down and model health management</h3>
+      <p>The worker tracks:</p>
+      <ul>
+        <li>provider status</li>
+        <li>rate limits</li>
+        <li>key cooldown windows</li>
+        <li>active provider health</li>
+        <li>which model is currently healthy for text or vision</li>
+      </ul>
+
+      <h3>Safety layer</h3>
+      <p>The code uses a sanitizer to avoid leaky or malformed responses. Examples include:</p>
+      <ul>
+        <li>hacky internal tool call leaks</li>
+        <li>instruction-following artifacts</li>
+        <li>generic filler text</li>
+        <li>persona leakage</li>
+      </ul>
+
+      <pre>
+sanitizePersonaLeaks(response)
+</pre>
+
+      <p>This is not a cosmetic step — it acts as a safety control to keep the product coherent and professional.</p>
+
+      <h3>Tool-call coordination</h3>
+      <p>When the model wants to call a tool, the workflow is typically:</p>
+      <ol>
+        <li>Model emits function call schema</li>
+        <li>Worker parses and executes tool</li>
+        <li>Tool returns structured result</li>
+        <li>Second model pass turns raw result into a polished answer</li>
+      </ol>
+
+      <div class="callout">
+        This is a high-quality pattern for modern tool-augmented LLM applications.</div>
+    </div>
+
+    <div id="tools" class="section">
+      <h2>9. Tools and tool execution</h2>
+      <p><code>worker/tools.ts</code> defines the tool registry and rate-limit policy.</p>
+
+      <h3>Purpose</h3>
+      <ul>
+        <li>register tool schemas</li>
+        <li>block or throttle abuse</li>
+        <li>route tool calls to the right implementation</li>
+        <li>make each tool obey a consistent result format</li>
+      </ul>
+
+      <h3>Examples of tool use</h3>
+      <ul>
+        <li>weather lookup</li>
+        <li>currency conversion</li>
+        <li>movie info</li>
+        <li>web search</li>
+        <li>search/youtube</li>
+        <li>media generation or sending</li>
+      </ul>
+
+      <h3>Rate limiting</h3>
+      <p>The code keeps per-feature quotas in memory and blocks overuse if a user exceeds their allowance.</p>
+      <pre>
+checkRateLimit(env, chatId, "image")
+</pre>
+      <p>It is critical for controlling expensive features like deep searches, image generation, or media fetches.</p>
+    </div>
+
+    <div id="apis" class="section">
+      <h2>10. API integrations</h2>
+      <p><code>worker/apis.ts</code> contains the low-level data integrations the app needs.</p>
+
+      <h3>Weather</h3>
+      <ul>
+        <li>Open-Meteo used as primary source</li>
+        <li>wttr.in fallback if main source fails</li>
+      </ul>
+
+      <h3>Stocks</h3>
+      <ul>
+        <li>Yahoo Finance data for symbol prices and change</li>
+      </ul>
+
+      <h3>Crypto</h3>
+      <ul>
+        <li>CoinGecko</li>
+        <li>CryptoCompare</li>
+        <li>Coinbase</li>
+      </ul>
+
+      <h3>Movies and TV</h3>
+      <ul>
+        <li>TMDB API</li>
+        <li>supports “upcoming” and “recent” release logic</li>
+      </ul>
+
+      <h3>Currency</h3>
+      <ul>
+        <li>exchange rate API with fallback</li>
+      </ul>
+
+      <div class="callout">
+        This file acts like the application’s structured “API utility toolbox.” It keeps integrations small and reusable instead of scattering them throughout the codebase.</div>
+    </div>
+
+    <div id="search" class="section">
+      <h2>11. Search and deep research</h2>
+      <p>The app contains a dedicated deep-search path, separate from ordinary chat.</p>
+
+      <h3>Search model</h3>
+      <p>It uses a search pipeline to do the equivalent of “researching the web for the answer,” then reformatting it into a user-friendly briefing.</p>
+
+      <ul>
+        <li>Search API obtains source data</li>
+        <li>Information is summarized</li>
+        <li>Model writes a structured briefing with bullet points and sources</li>
+        <li>It then appends the search result into the user’s memory/history</li>
+      </ul>
+
+      <pre>
+composeSearchBriefing(env, query, raw, userId)
+</pre>
+
+      <p>Deep search is intentionally treated as a special response style, because the user is requesting a research-grade answer rather than a normal conversational reply.</p>
+    </div>
+
+    <div id="auth" class="section">
+      <h2>12. Authentication, onboarding, and recovery</h2>
+      <p>Authentication is a real system, not just a casual login path. It uses a user model with identity code and PIN.</p>
+
+      <h3>Key concepts</h3>
+      <ul>
+        <li><strong>identity_code</strong>: user code, e.g. <code>BZ-XXXX</code></li>
+        <li><strong>pin_hash</strong>: 4-digit PIN hashed for verification</li>
+        <li><strong>platform_identities</strong>: maps Telegram/web account to user</li>
+      </ul>
+
+      <h3>Flow</h3>
+      <ol>
+        <li>Start signup</li>
+        <li>Ask for name</li>
+        <li>Ask for email / DOB / location</li>
+        <li>Generate identity and set PIN</li>
+        <li>Persist user and platform mapping</li>
+        <li>Set user status to approved or waitlist depending on logic</li>
+      </ol>
+
+      <h3>Recovery</h3>
+      <p>Recovery supports:</p>
+      <ul>
+        <li>forgot PIN</li>
+        <li>recover account by Gmail</li>
+        <li>admin approve/recover flow</li>
+      </ul>
+
+      <div class="callout danger">
+        The project includes lockouts after repeated wrong PIN attempts, which is a strong operational and safety measure.</div>
+    </div>
+
+    <div id="commands" class="section">
+      <h2>13. Commands and Telegram callback flows</h2>
+      <p><code>worker/commands.ts</code> is one of the central user interaction layers.</p>
+
+      <h3>Command handling examples</h3>
+      <ul>
+        <li><code>!help</code></li>
+        <li><code>!status</code></li>
+        <li><code>!settings</code></li>
+        <li><code>!timezone set Asia/Kolkata</code></li>
+        <li><code>!remember ...</code></li>
+        <li><code>!privacy</code></li>
+        <li><code>!games</code></li>
+        <li><code>!logout</code></li>
+        <li><code>!deleteme</code></li>
+      </ul>
+
+      <h3>Callback actions</h3>
+      <p>The app also handles Telegram inline keyboard buttons like:</p>
+      <ul>
+        <li><code>help:...</code></li>
+        <li><code>game:...</code></li>
+        <li><code>ci:yes</code></li>
+        <li><code>admrec:</code></li>
+        <li><code>resetpin:</code></li>
+        <li><code>support_cat:</code></li>
+      </ul>
+
+      <p>These callbacks lead to dynamic state transitions and action routing. This is part of the app’s rich conversational UX.</p>
+    </div>
+
+    <div id="admin" class="section">
+      <h2>14. Admin and monitoring</h2>
+      <p>The workspace includes a serious admin and monitoring plane, not just a chatbot backend.</p>
+
+      <h3>Admin functions</h3>
+      <ul>
+        <li>approve user</li>
+        <li>deny user</li>
+        <li>block user</li>
+        <li>reset PIN</li>
+        <li>recover accounts</li>
+        <li>unlock admin locks</li>
+      </ul>
+
+      <h3>Monitoring statistics</h3>
+      <p><code>worker/stats.ts</code> builds a structured stats payload for the dashboard with things like:</p>
+      <ul>
+        <li>Groq health</li>
+        <li>user counts</li>
+        <li>approved vs waitlist counts</li>
+        <li>per-user message counts</li>
+        <li>tool configuration health</li>
+        <li>models active / last probed</li>
+        <li>recent errors</li>
+        <li>maintenance mode</li>
+        <li>test stats</li>
+      </ul>
+
+      <div class="callout">
+        This dashboard is a real operations control center for the live AI service.</div>
+    </div>
+
+    <div id="dashboard" class="section">
+      <h2>15. Dashboard internals</h2>
+      <p><code>worker/dashboard/</code> contains a modular UI system for the lab dashboard. It includes:</p>
+      <ul>
+        <li>gate</li>
+        <li>topbar</li>
+        <li>left navigation</li>
+        <li>orb / hologram display</li>
+        <li>right panel</li>
+        <li>styles</li>
+        <li>scripts</li>
+        <li>tabs (overview, keys, errors, tools, users, vitals, models, live feed, tests, settings, etc.)</li>
+      </ul>
+
+      <h3>Dashboard purpose</h3>
+      <p>The dashboard gives operators practical visibility into the running system, including health, status, model rotations, and test quality.</p>
+
+      <h3>Client-side script behavior</h3>
+      <p>Its JS script is responsible for:</p>
+      <ul>
+        <li>fetching stats</li>
+        <li>polling data</li>
+        <li>rendering live values</li>
+        <li>showing active issues</li>
+        <li>updating the system metrics card</li>
+      </ul>
+    </div>
+
+    <div id="agents" class="section">
+      <h2>16. Agents, tests, and maintenance jobs</h2>
+      <p>Bizli is not just an app; it contains agents and scheduled tasks.</p>
+
+      <h3>Background jobs</h3>
+      <ul>
+        <li>maintenance checks</li>
+        <li>greeting nudges</li>
+        <li>diagnostics</li>
+        <li>provider health probes</li>
+        <li>test-run scheduling</li>
+      </ul>
+
+      <h3>Quality tests</h3>
+      <p><code>worker/tests.ts</code> defines the quality harness. It measures things like:</p>
+      <ul>
+        <li>greeting quality</li>
+        <li>Hindi language response quality</li>
+        <li>identity flow</li>
+        <li>name handling</li>
+        <li>weather tool quality</li>
+        <li>other model behavior checks</li>
+      </ul>
+
+      <p>It produces pass/fail rates and records results for later analysis.</p>
+
+      <div class="callout warning">
+        This is important because the project treats “AI quality” as an operational measurement, not a one-time design problem.</div>
+    </div>
+
+    <div id="dataflow" class="section">
+      <h2>17. End-to-end message flow</h2>
+      <pre>
+1. User messages Telegram or web chat
+2. Worker receives request in /telegram or /web-chat
+3. Identity + auth check runs
+4. Maintenance mode / admin gating is checked
+5. User record is loaded from Supabase (or derived from platform identity)
+6. Recent KV history is read
+7. Relevant long-term memory is retrieved
+8. Context is assembled (timezone, user identity, tool capability, support rules)
+9. callGroq() sends prompt to the active provider
+10. The model decides whether to use a tool
+11. Tools execute if required
+12. A second synthesis pass produces polished final output
+13. The output is sanitized before sending
+14. Response is sent to Telegram or web UI
+15. User and assistant text are persisted to DB/KV
+16. Memory extraction may run asynchronously in the background
+</pre>
+
+      <p>This exact lifecycle is the essence of the product.</p>
+    </div>
+
+    <div id="security" class="section">
+      <h2>18. Security and trust model</h2>
+      <h3>Strong points</h3>
+      <ul>
+        <li>PIN hashing and lockouts</li>
+        <li>admin gating for privileged actions</li>
+        <li>support request routing</li>
+        <li>rate limits on heavy features</li>
+        <li>sanitization of model outputs</li>
+        <li>clear separation of user data and system state</li>
+      </ul>
+
+      <h3>Areas to watch</h3>
+      <ul>
+        <li>many integration points increase the bug surface</li>
+        <li>tool actions can expand attack surface if unguarded</li>
+        <li>user-defined prompts and external web data need strict shaping</li>
+        <li>large prompt templates can be brittle without disciplined testing</li>
+      </ul>
+
+      <p>Overall, the system has a thoughtful operational model, especially around model safety and app-level control.</p>
+    </div>
+
+    <div id="applying" class="section">
+      <h2>19. Contributing and extending the app</h2>
+      <h3>Good extension points</h3>
+      <ul>
+        <li>Add a new tool to <code>worker/tools.ts</code> and implement helper in <code>worker/apis.ts</code></li>
+        <li>Add a command to <code>worker/commands.ts</code></li>
+        <li>Add a memory retrieval rule in <code>worker/memory.ts</code></li>
+        <li>Change model routing in <code>worker/brain.ts</code></li>
+        <li>Add a dashboard panel under <code>worker/dashboard/tabs</code></li>
+      </ul>
+
+      <h3>Development workflow</h3>
+      <pre>
+npm install
+npx tsc --noEmit
+npm run dev
+npm run deploy
+</pre>
+
+      <p>If you are extending Bizli, the most important principle is to <strong>keep routing, memory, and inference separate</strong>. That separation is what makes the codebase easier to reason about.</p>
+    </div>
+
+    <div class="section">
+      <h2>Conclusion</h2>
+      <p>
+        Bizli Worker is a sophisticated AI companion system designed as a production-grade Cloudflare Worker. It integrates chat, memory, provider orchestration, tools, analytics, and admin monitoring into a coherent runtime. The codebase shows careful attention to user experience, resiliency, safety, and operational health.
+      </p>
+      <p>
+        The single biggest takeaway is that this is not a simple demo bot. It is a full product architecture: a Telegram and web messaging app backed by AI, external data integrations, memory retrieval, an admin control plane, and continuous reliability testing.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
